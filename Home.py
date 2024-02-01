@@ -22,7 +22,7 @@ tickers = pd.read_csv('stocklist.csv')
 # Get All ticker data of interest # 
 @st.cache_data
 def getTickerData():
-    firstDate = '2023-01-01'
+    firstDate = '2001-01-01'
     lastDate = str(datetime.now().strftime('%Y-%m-%d'))
     for i, ticker in enumerate(tickers['ticker']):  
         print('Loading ' + ticker + ' data')
@@ -66,7 +66,6 @@ allData['90day_DailyVolPercAvg'] = allData.groupby('ticker')['DailyVolatility_Pe
 allData['360day_DailyVolPercAvg'] = allData.groupby('ticker')['DailyVolatility_Perc'].transform(lambda x: x.rolling(window=360).mean())
 
 
-
 #---------------------------------------------#
 #----------------- FRONT END -----------------#
 #---------------------------------------------#
@@ -80,13 +79,8 @@ topData = allData[allData['Date']==allData['Date'].max()]
 topData = topData[['ticker','Close','5day_SMA','30day_SMA','360day_SMA','5day_DailyVolPercAvg','30day_DailyVolPercAvg','360day_DailyVolPercAvg']]
 st.dataframe(topData, hide_index=True)
 
-allData.info() 
-# Arbirtrage Check plot 
-# Another idea: What if you had a chart that normalizes the line charts/ overlays 
-#   # add parameter here to make it so u can choose what line is being shown 
-
+#---------- Singl ticker investigate ------------# 
 st.write('### Ticker Analysis ')
-
 # Data Prep and filters
 col1,col2,col3 = st.columns(3) 
 with col1:
@@ -95,14 +89,24 @@ with col1:
     (tickers['ticker'])
         )
 with col2: 
-    date_min = st.date_input("Min Date",value=date.today()- timedelta(days=365))
+    # Convert Date inputs 
+    date_ranges = ['10D','1M','6M','1Y','3Y','5Y','MAX']
+    date_values = ['10','30','180','365','1095','1825','99999']
+    date_back = st.selectbox('Choose date range:', date_ranges, index=4)
+    numdays = date_values[date_ranges.index(date_back)]
+
 with col3:
     date_max = st.date_input("Max Date")
 
+
+# Get today's date
+date_min = datetime.now() - timedelta(days = int(numdays) )
+date_min = date_min.strftime('%Y-%m-%d')
+
+# Apply filters 
 plotdata = allData[allData['ticker'] == symbol]
 plotdata = plotdata[plotdata['Date'].astype(str) >= str(date_min)]
 plotdata = plotdata[plotdata['Date'].astype(str) <= str(date_max)]
-
 
 col1_charts,col2_charts = st.columns(2) 
 with col1_charts:
@@ -137,3 +141,16 @@ with col2_charts:
                     legend=dict(title=''))
     fig = go.Figure(data=lines, layout=layout)
     st.plotly_chart(fig,sharing="streamlit")
+
+
+#---------- Compare tickers ------------# 
+st.write('### Compare ticker history ')  
+
+compare_symbols = st.multiselect('Select symbols', tickers['ticker'])
+if len(compare_symbols) <= 0:
+    comparedf = allData 
+else:   
+    comparedf = allData[allData['ticker'].isin(compare_symbols)]
+
+comparefig = px.line(comparedf, x=comparedf['Date'], y=comparedf['Close'], color=comparedf['ticker'], title='Compare Chart')
+st.plotly_chart(comparefig,sharing="streamlit")
