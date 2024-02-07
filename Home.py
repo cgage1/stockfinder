@@ -14,6 +14,7 @@ import plotly.graph_objs as go
 import plotly 
 import plotly.express as px
 from datetime import date, timedelta
+import pandasql as ps 
 
 st.set_page_config(layout="wide")
 
@@ -48,9 +49,21 @@ allData.insert(0, column.name, column)
 
 # Create Custom Cols 
 allData['High-Low'] = allData['High'] - allData['Low']  
-# CHANGE THIS TO A LAG ON CLOSE NOT HIGH VS LOW (VOLATILITY IS ABS Otherwise)
 allData['DailyVolatility_Perc'] = (allData['High'] - allData['Low']) * 100  / ((allData['High'] + allData['Low'])/ 2 )
+allData['Close_lag'] = allData.groupby('ticker')['Close'].shift(1)
+#allData['CloseChange_Perc'] = ( allData.groupby('ticker')['Close'] - allData.groupby('ticker')['Close'].shift(1) ) / allData.groupby('ticker')['Close'].shift(1)
+
+# Transformations :(Close - lag(Close) over (partition by ticker order by date) ) / lag(Close) over (partition by ticker order by date) as CloseChange_Perc 
+sql = """
+select *,
+case when lag(Close) over (partition by ticker order by Date) is not null 
+    then ( Close - lag(Close) over (partition by ticker order by Date) )*100 / lag(Close) over (partition by ticker order by Date) end  as CloseChange_Perc 
+
+from allData
+"""
+allData = ps.sqldf(sql, locals())
 allData = allData.reset_index()
+
 
 # Create Customs SMA's
 allData['5day_SMA'] = allData.groupby('ticker')['Close'].transform(lambda x: x.rolling(window=5).mean())
@@ -113,19 +126,28 @@ comparedf = comparedf[comparedf['Date'].astype(str) <= str(date_max)]
 
 col1_compare, col2_compare, col3_compare = st.columns(3)
 with col1_compare:
-    comparefig = px.line(comparedf, x=comparedf['Date'], y=comparedf['Close'], color=comparedf['ticker'], title="Vol Dist ["+inspect_column+"]")
+    comparefig = px.line(comparedf, x=comparedf['Date'], y=comparedf['Close'], color=comparedf['ticker'], title="Close by Date")
     st.plotly_chart(comparefig,sharing="streamlit",use_container_width=True)
 with col2_compare:
-    fig_hist2 = px.histogram(comparedf, x=inspect_column, color="ticker", marginal="box",title="Vol Dist ["+inspect_column+"]",
-                    hover_data=comparedf.columns)
-    st.plotly_chart(fig_hist2,sharing="streamlit",use_container_width=True)
+    #comparedf['CloseChange_Perc_cum'] = comparedf.groupby('ticker')['CloseChange_Perc'].cumsum()  
+    #comparedf['CloseChange_Perc_cum'] = comparedf.groupby('ticker')['Close'] / comparedf.groupby('ticker')['Close'].first()
+    # Transformations :(Close - lag(Close) over (partition by ticker order by date) ) / lag(Close) over (partition by ticker order by date) as CloseChange_Perc 
+    sql = """
+    select *,
+    Close*100 / first_value(Close) over (partition by ticker order by Date) as CloseChange_Perc_cum
+    from comparedf
+    """
+    comparedf = ps.sqldf(sql, locals())
+
+    comparefig_perc = px.line(comparedf, x=comparedf['Date'], y=comparedf['CloseChange_Perc_cum'], color=comparedf['ticker'], title="% Since Origin")
+    st.plotly_chart(comparefig_perc, sharing="streamlit", use_container_width=True)
 with col3_compare:
-    fig_box = px.box(comparedf, y=inspect_column, color="ticker",title="Vol Dist ["+inspect_column+"]")
+    fig_box = px.box(comparedf, x=inspect_column, color="ticker",title="Vol Dist ["+inspect_column+"]")
     st.plotly_chart(fig_box,sharing="streamlit",use_container_width=True)
 
 
 
-#---------- Singl ticker investigate ------------# 
+#---------- Single ticker investigate ------------# 
 st.write('### Symbol Analysis ')
 # Data Prep and filters
 symbol = st.selectbox(
@@ -178,6 +200,37 @@ with col3_charts:
     fig_hist = px.histogram(plotdata, x=inspect_column, color="ticker", marginal="box",
                     hover_data=plotdata.columns, title='$' + symbol + " Vol Dist ["+inspect_column+"]")
     st.plotly_chart(fig_hist,sharing="streamlit",use_container_width=True)
+
+col1_charts1, col1_charts2 = st.columns(2)
+# BOLLINGER # 
+with col1_charts1:
+    # Calculate rolling mean and standard deviation
+    window_size = st.slider('Window Size', 0,40,20)  # You can adjust this window size as needed
+    rolling_mean = plotdata['Close'].rolling(window=window_size).mean()
+    rolling_std = plotdata['Close'].rolling(window=window_size).std()
+
+    # Compute upper and lower Bollinger Bands
+    upper_band = rolling_mean + (2 * rolling_std)
+    lower_band = rolling_mean - (2 * rolling_std)
+
+    # Create traces for the plot
+    trace_close = go.Scatter(x=plotdata.index, y=plotdata['Close'], mode='lines', name='Closing Price')
+    trace_mean = go.Scatter(x=plotdata.index, y=rolling_mean, mode='lines', name='Rolling Mean')
+    trace_upper_band = go.Scatter(x=plotdata.index, y=upper_band, mode='lines', name='Upper Bollinger Band', line=dict(dash='dash'))
+    trace_lower_band = go.Scatter(x=plotdata.index, y=lower_band, mode='lines', name='Lower Bollinger Band', line=dict(dash='dash'))
+
+    # Combine traces into a figure
+    layout = go.Layout(title='$' + symbol + ' Bollinger Bands',
+                    xaxis_title='Date',
+                    yaxis_title='Price')
+    fig = go.Figure(data=[trace_close, trace_mean, trace_upper_band, trace_lower_band], layout=layout)
+    st.plotly_chart(fig,sharing="streamlit",use_container_width=True)
+
+
+
+
+
+
 
 
 # Display data from filters for drill down 
