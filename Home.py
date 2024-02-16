@@ -85,7 +85,7 @@ allData['360day_DailyVolPercAvg'] = allData.groupby('ticker')['DailyVolatility_P
 #---------------------------------------------#
 
 # Need 1 row per ticker grouping  
-st.title("ALGO :diamond_shape_with_a_dot_inside:")
+st.title("Austere - Basic Analysis :diamond_shape_with_a_dot_inside:")
 st.write('### Sorted Symbol Profiles')
 
 # Show top KPI's 
