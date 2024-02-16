@@ -108,8 +108,8 @@ with col1:
         comparedf = allData[allData['ticker'].isin(compare_symbols)]
 with col2: 
     # Convert Date inputs 
-    date_ranges = ['10D','1M','6M','1Y','3Y','5Y','MAX']
-    date_values = ['10','30','180','365','1095','1825','99999']
+    date_ranges = ['10D','1M','3m', '6M', '1Y' ,'2Y', '3Y',  '4Y',   '5Y',   'MAX']
+    date_values = ['10', '30','90', '180','365','730','1095','1460' ,'1825','99999']
     date_back = st.selectbox('Choose date range:', date_ranges, index=4)
     numdays = date_values[date_ranges.index(date_back)]
     date_min = datetime.now() - timedelta(days = int(numdays) )
@@ -214,12 +214,12 @@ with col1_charts1:
     lower_band = rolling_mean - (2 * rolling_std)
 
     # Create traces for the plot
-    trace_close = go.Scatter(x=plotdata.index, y=plotdata['Close'], mode='lines', name='Closing Price')
-    trace_mean = go.Scatter(x=plotdata.index, y=rolling_mean, mode='lines', name='Rolling Mean')
-    trace_upper_band = go.Scatter(x=plotdata.index, y=upper_band, mode='lines', name='Upper Bollinger Band', line=dict(dash='dash'))
-    trace_lower_band = go.Scatter(x=plotdata.index, y=lower_band, mode='lines', name='Lower Bollinger Band', line=dict(dash='dash'))
+    trace_close = go.Scatter(x=plotdata['Date'], y=plotdata['Close'], mode='lines', name='Closing Price')
+    trace_mean = go.Scatter(x=plotdata['Date'], y=rolling_mean, mode='lines', name='Rolling Mean')
+    trace_upper_band = go.Scatter(x=plotdata['Date'], y=upper_band, mode='lines', name='Upper Bollinger Band', line=dict(dash='dash'))
+    trace_lower_band = go.Scatter(x=plotdata['Date'], y=lower_band, mode='lines', name='Lower Bollinger Band', line=dict(dash='dash'))
 
-    # Combine traces into a figure
+    # Combine traces into a figure  
     layout = go.Layout(title='$' + symbol + ' Bollinger Bands',
                     xaxis_title='Date',
                     yaxis_title='Price')
