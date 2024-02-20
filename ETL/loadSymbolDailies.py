@@ -4,16 +4,10 @@
 #
 
 import yfinance as yf
-import matplotlib.pyplot as plt
 import pandas as pd 
 from datetime import datetime 
-import plotly.graph_objs as go
-import plotly 
-import plotly.express as px
-from datetime import date, timedelta
 import pandasql as ps 
 import config
-
 import psycopg2
 import yaml 
 
@@ -44,8 +38,7 @@ def getSymbolList():
 mySymbols = getSymbolList()
 
 
-# get tickers of interest 
-
+# Get Ticker data from yahoo finance 
 def getTickerData():
     firstDate = '2001-01-01' # this will be changed to pull dynamically from pg 
     lastDate = str(datetime.now().strftime('%Y-%m-%d'))
@@ -61,9 +54,10 @@ def getTickerData():
                 allData = pd.concat([allData,tmpData])
         except Exception as e: 
             print('Error with: ' + symbol)
-        
     return allData
 
 allData = getTickerData()
 
-
+# Now port allData into a new pg table (dbo.symbol_quotes) (this schema will copy the schame from allData)
+allData.info() 
+allData.head() 
