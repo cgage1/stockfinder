@@ -26,25 +26,34 @@ def getSymbolList():
     port=creds['austere-prod']['port']
     )
     # get symbols of interest and their max date in dbo.symbol_quotes 
-    query = "select symbol from dbo.symbols where active = '1'"
+    query = """
+    /* get symbol dates for */
+    with maxdates as (
+        select symbol, max(date) maxdate 
+        from dbo.symbol_quotes
+        group by symbol 
+        )
+    select s.symbol, cast(coalesce(maxdates.maxdate, '1980-01-01') as varchar) maxdate 
+    from dbo.symbols s
+    LEFT JOIN maxdates ON s.symbol = maxdates.symbol 
+    """
     df = pd.read_sql(query, conn)
     conn.close()
-    return df 
+    return df
 
 
 
 # Get Ticker data from yahoo finance 
-def getTickerData(mySymbols):
-    firstDate = '1980-01-01' # this will be changed to pull dynamically from pg 
-    lastDate = str(datetime.now().strftime('%Y-%m-%d'))  # this will be changed to pull dynamically from pg 
+def getSymbolQuotes(mySymbols):
+    lastDate = str(datetime.now().strftime('%Y-%m-%d'))  
     for i, symbol in enumerate(mySymbols['symbol']):  
         print('Loading ' + symbol + ' data')
         try: 
             if i == 0:
-                allData = yf.download(symbol, firstDate, lastDate)
+                allData = yf.download(symbol, mySymbols.iloc[i]['maxdate'], lastDate)
                 allData['symbol'] = symbol 
             else:
-                tmpData = yf.download(symbol, firstDate, lastDate)
+                tmpData = yf.download(symbol, mySymbols.iloc[i]['maxdate'], lastDate)
                 tmpData['symbol'] = symbol 
                 allData = pd.concat([allData,tmpData])
         except Exception as e: 
@@ -103,11 +112,14 @@ def upsertToSymbolQuotesFromStaging():
 # RUN ALL 
 def main():
     mySymbols = getSymbolList()
-    allData = getTickerData(mySymbols)
+    allData = getSymbolQuotes(mySymbols)
+    print('Pushing data to staging table dbo.symbol_quotes_staging.')
     loadQuotesToStaging(allData)
+    print('Formatting/loading data into target table dbo.symbol_quotes.')
     upsertToSymbolQuotesFromStaging()
 
 # UPDATE THIS CODE TO USE EXISTING MAX DATES TO PULL INCREMENTAL DATA! :) 
 
 if __name__ == "__main__":
     main() 
+

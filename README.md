@@ -2,7 +2,7 @@
 Streamlit app to identify and analyze stocks 
 
 ### To do
-- loadSymbolDailies.py :  UPDATE THIS CODE TO USE EXISTING MAX DATES TO PULL INCREMENTAL DATA! (also change file name to loadSymbolQuotes to match schema)
+- Convert home.py to read from postgres instead of pull from API 
 - Explore yfinance api data availability 
 - Replace volatility chart B with % change day by (need to create new field w lag() )
 - Bollinger bands

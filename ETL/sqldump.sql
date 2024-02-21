@@ -53,8 +53,19 @@ INSERT INTO dbo.symbol_quotes (symbol, "date", "open", high, low, "close", adj_c
 ; 
 
 
+-- get symbol dates for 
+with maxdates as (
+	select symbol, max(date) maxdate 
+	from dbo.symbol_quotes
+	group by symbol 
+	)
+select s.symbol, cast(coalesce(maxdates.maxdate, '1980-01-01') as varchar) maxdate 
+from dbo.symbols s
+LEFT JOIN maxdates ON s.symbol = maxdates.symbol 
 
-select * from dbo.symbol_quotes 
+
+
+
 
 
 
