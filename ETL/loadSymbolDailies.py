@@ -9,8 +9,8 @@ from datetime import datetime
 import pandasql as ps 
 import config
 import psycopg2
+import psycopg2.extras
 import yaml 
-
 
 # YAML FILE LOCATION: 
 with open(config.creds_filepath, "r") as yaml_file:
@@ -19,29 +19,24 @@ with open(config.creds_filepath, "r") as yaml_file:
 def getSymbolList():
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
-        dbname=creds['austere-prod']['dbname'],
-        user=creds['austere-prod']['user'],
-        password=creds['austere-prod']['password'],
-        host=creds['austere-prod']['host'],
-        port=creds['austere-prod']['port']
+    dbname=creds['austere-prod']['dbname'],
+    user=creds['austere-prod']['user'],
+    password=creds['austere-prod']['password'],
+    host=creds['austere-prod']['host'],
+    port=creds['austere-prod']['port']
     )
-    # get symbols of interest and their max date in dbo.symbol_dailies 
-    query = "select symbol from dbo.symbols where active = bool(1)"
-    # Execute the query and load data into a Pandas DataFrame
+    # get symbols of interest and their max date in dbo.symbol_quotes 
+    query = "select symbol from dbo.symbols where active = '1'"
     df = pd.read_sql(query, conn)
-    # Close the connection
     conn.close()
     return df 
 
 
 
-mySymbols = getSymbolList()
-
-
 # Get Ticker data from yahoo finance 
-def getTickerData():
-    firstDate = '2001-01-01' # this will be changed to pull dynamically from pg 
-    lastDate = str(datetime.now().strftime('%Y-%m-%d'))
+def getTickerData(mySymbols):
+    firstDate = '1980-01-01' # this will be changed to pull dynamically from pg 
+    lastDate = str(datetime.now().strftime('%Y-%m-%d'))  # this will be changed to pull dynamically from pg 
     for i, symbol in enumerate(mySymbols['symbol']):  
         print('Loading ' + symbol + ' data')
         try: 
@@ -50,14 +45,69 @@ def getTickerData():
                 allData['symbol'] = symbol 
             else:
                 tmpData = yf.download(symbol, firstDate, lastDate)
-                tmpData['ticker'] = symbol 
+                tmpData['symbol'] = symbol 
                 allData = pd.concat([allData,tmpData])
         except Exception as e: 
             print('Error with: ' + symbol)
     return allData
 
-allData = getTickerData()
 
-# Now port allData into a new pg table (dbo.symbol_quotes) (this schema will copy the schame from allData)
-allData.info() 
-allData.head() 
+# Now port allData into a new pg table (dbo.symbol_quotes_staging) (this schema will copy the schame from allData)
+def loadQuotesToStaging(df):
+    conn = psycopg2.connect(
+        dbname=creds['austere-prod']['dbname'],
+        user=creds['austere-prod']['user'],
+        password=creds['austere-prod']['password'],
+        host=creds['austere-prod']['host'],
+        port=creds['austere-prod']['port']
+    )
+    # df is the dataframe
+    if len(df) > 0:
+        df.reset_index(inplace=True)
+        df.columns = [col.lower().replace(' ', '_') for col in df.columns]
+        df_columns = list(df)
+        # create (col1,col2,...)
+        columns = ",".join(df_columns)
+        # create VALUES('%s', '%s",...) one '%s' per column
+        values = "VALUES({})".format(",".join(["%s" for _ in df_columns])) 
+        #create INSERT INTO table (columns) VALUES('%s',...)
+        insert_stmt = "INSERT INTO {} ({}) {}".format('dbo.symbol_quotes_staging', columns, values)
+        cur = conn.cursor()
+        psycopg2.extras.execute_batch(cur, insert_stmt, df.values)
+        conn.commit()
+        cur.close()
+    else:
+        print('No new symbol data available.')
+
+def upsertToSymbolQuotesFromStaging():
+    conn = psycopg2.connect(
+        dbname=creds['austere-prod']['dbname'],
+        user=creds['austere-prod']['user'],
+        password=creds['austere-prod']['password'],
+        host=creds['austere-prod']['host'],
+        port=creds['austere-prod']['port']
+    )
+    sql = """
+        /* upsert from staging into main table */ 
+        INSERT INTO dbo.symbol_quotes (symbol, "date", "open", high, low, "close", adj_close, volume)
+            select symbol, cast("date" as date) date , "open", high, low, "close", adj_close, volume
+            from dbo.symbol_quotes_staging 
+            on conflict 
+            do nothing 
+        ; """
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    conn.commit()
+
+
+# RUN ALL 
+def main():
+    mySymbols = getSymbolList()
+    allData = getTickerData(mySymbols)
+    loadQuotesToStaging(allData)
+    upsertToSymbolQuotesFromStaging()
+
+# UPDATE THIS CODE TO USE EXISTING MAX DATES TO PULL INCREMENTAL DATA! :) 
+
+if __name__ == "__main__":
+    main() 
