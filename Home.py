@@ -23,6 +23,32 @@ import duckdb
 # Page configurations 
 st.set_page_config(layout="wide")
 
+imagepath = "C:/Users/colto/Documents/stockfinder/images/AustereLogo_Small.jfif"
+
+def add_logo():
+    st.markdown(
+        """
+        <style>
+            [data-testid="stSidebarNav"] {
+                background-image: url(http://placekitten.com/200/200);
+                background-repeat: no-repeat;
+                padding-top: 120px;
+                background-position: 20px 20px;
+            }
+            [data-testid="stSidebarNav"]::before {
+                content: "Austere";
+                margin-left: 20px;
+                margin-top: 20px;
+                font-size: 30px;
+                position: relative;
+                top: 100px;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+add_logo()
+
 # YAML FILE LOCATION: 
 with open(config.creds_filepath, "r") as yaml_file:
     creds = yaml.safe_load(yaml_file)
