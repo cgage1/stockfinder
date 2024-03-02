@@ -23,14 +23,14 @@ import duckdb
 # Page configurations 
 st.set_page_config(layout="wide")
 
-imagepath = "C:/Users/colto/Documents/stockfinder/images/AustereLogo_Small.jfif"
+imagepath = "https://private-user-images.githubusercontent.com/20215141/309497840-8be596a9-d5cb-4d65-b8c4-dda9bfee0baa.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MDk0MTAwNzgsIm5iZiI6MTcwOTQwOTc3OCwicGF0aCI6Ii8yMDIxNTE0MS8zMDk0OTc4NDAtOGJlNTk2YTktZDVjYi00ZDY1LWI4YzQtZGRhOWJmZWUwYmFhLnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDAzMDIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQwMzAyVDIwMDI1OFomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTRlNGJiYmVkZTVmMzYxN2QxNjg4ZDExNzFjMGUxM2VjYTA5NDcxMDRhYjFkYzUzYWM3Yjk0MTExYjgwYThiMjImWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JmFjdG9yX2lkPTAma2V5X2lkPTAmcmVwb19pZD0wIn0.cvqWFjH3uAZkb8gw_cdDcuCDA4CcCG1dbsFlhmSmpS0"
 
 def add_logo():
     st.markdown(
         """
         <style>
             [data-testid="stSidebarNav"] {
-                background-image: url(http://placekitten.com/200/200);
+                background-image: url({imagepath});
                 background-repeat: no-repeat;
                 padding-top: 120px;
                 background-position: 20px 20px;
