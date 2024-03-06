@@ -71,7 +71,7 @@ join dbo.symbols s on s.symbol = sq.symbol
 	and s.active = '1'
 	
 	
-SELECT * FROM dbo.symbols 
+	update dbo.symbols set active = '1'
 
 
 
@@ -85,6 +85,8 @@ SELECT * FROM dbo.symbols
 -- update dbo.symbols set type = 'STOCK' where symbol in ('ILMN','BABA')
 	
 SELECT * FROM dbo.watchlists 
+
+insert into dbo.watchlists (shortname, longname) select 'MicroChips','Collection of microchip stocks and indices'
 
 
 -- drop table dbo.watchlists 
@@ -109,11 +111,17 @@ create table dbo.watchlistsymbols (
 	)
 
 
+select w2.shortname watchlist, w2.longname as desc, w.symbol 
+from dbo.watchlistsymbols w 
+left join dbo.watchlists w2 on w.watchlist_id = w2.id  
+
+
+
 -- create default watchlist 
 insert into dbo.watchlistsymbols (watchlist_id, symbol)
-	select (select id from dbo.watchlists where shortname = 'Algo'), symbol 
+	select (select id from dbo.watchlists where shortname = 'MicroChips'), symbol 
 	from dbo.symbols 
-	where symbol in ('OMIC','ALGN')
+	where symbol in ('NVDA')
 
 
 	

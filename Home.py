@@ -72,7 +72,7 @@ def getSymbolQuotes():
     cast(sq.volume as float) as Volume
     FROM dbo.symbol_quotes sq
     join dbo.symbols s on s.symbol = sq.symbol 
-        and s.active = '1'
+        
     """
     df = pd.read_sql(sql, conn)
     conn.close()
@@ -97,6 +97,26 @@ def getSymbols():
     return df
 
 Symbols = getSymbols()
+
+@st.cache_data
+def getWatchlistSymbols():
+    conn = psycopg2.connect(
+        dbname=creds['austere-prod']['dbname'],
+        user=creds['austere-prod']['user'],
+        password=creds['austere-prod']['password'],
+        host=creds['austere-prod']['host'],
+        port=creds['austere-prod']['port']
+        )
+    sql = """
+    select w2.shortname watchlist, w2.longname as desc, w.symbol 
+    from dbo.watchlistsymbols w 
+    left join dbo.watchlists w2 on w.watchlist_id = w2.id  
+    """
+    df = pd.read_sql(sql, conn)
+    conn.close()
+    return df
+
+watchlistSymbols = getWatchlistSymbols()
 
 # Move Symbol to first column 
 column = allData.pop('symbol')
@@ -138,7 +158,14 @@ allData['_360day_DailyVolPercAvg'] = allData.groupby('symbol')['DailyVolatility_
 #----------------- FRONT END -----------------#
 #---------------------------------------------#
 # Need 1 row per Symbol grouping  
-st.title("Austere - Basic Analysis :diamond_shape_with_a_dot_inside:")
+titleCol1, titleCol2, titleCol3 = st.columns([2,1,2])
+titleCol1.title("Austere - Basic Analysis :diamond_shape_with_a_dot_inside:")
+myWatchlist = titleCol2.selectbox('Choose watchlist:', watchlistSymbols['watchlist'].unique())
+if myWatchlist != 'Default':
+    mySymbols = watchlistSymbols[watchlistSymbols['watchlist']==myWatchlist]['symbol']
+    allData = allData[allData['symbol'].isin(mySymbols)]
+
+
 st.write('### Sorted Symbol Profiles')
 
 # Show top KPI's 
