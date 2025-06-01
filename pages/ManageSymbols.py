@@ -73,11 +73,33 @@ def insertSymbolToDatabase(symbol, desc, comment, type):
         st.write(symbol + ' is not valid, only yahoo finance symbols are valid.')
 
 
+def addSymbolToWatchlist(symbol, watchlist):
+    if is_valid_symbol(symbol):
+        conn = psycopg2.connect(
+            dbname=creds['austere-prod']['dbname'],
+            user=creds['austere-prod']['user'],
+            password=creds['austere-prod']['password'],
+            host=creds['austere-prod']['host'],
+            port=creds['austere-prod']['port']
+        )
+        sql = f"""
+        insert into dbo.watchlistsymbols (watchlist_id, symbol)
+            select (select id from dbo.watchlists where shortname = '{watchlist}'), '{symbol}'
+            ; """
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        conn.commit()
+        conn.close()
+        st.write(f'${symbol} written to database.')
+    else: 
+        st.write(symbol + ' is not valid, only yahoo finance symbols are valid.')
+
+
 ######## PAGE START 
 st.title('Manage Symbols')
 
 symbols = getSymbols()
-# Create a form
+st.write('##### Enter new symbol')
 with st.form("Enter Symbol"):
     inputcol1,inputcol2,inputcol3 = st.columns(3)
     symbol_input = inputcol1.text_input("Enter Yahoo trading symbol:" )
@@ -93,7 +115,6 @@ if submitted:
     else: 
         st.write('Symbol is required.')
 
-
 if st.button("Refresh all data [Admin Only functionality]"):
     from ETL import load_dbo_symbol_quotes
     load_dbo_symbol_quotes.main()
@@ -101,3 +122,15 @@ if st.button("Refresh all data [Admin Only functionality]"):
     st.dataframe(load_dbo_symbol_quotes.getSymbolList())
 
 
+st.write('##### Create watchlist')
+
+
+st.write('##### Add symbols to watchlist')
+with st.form("Add symbols to watchlist"):
+    inputcol1,inputcol2,inputcol3 = st.columns(3)
+    symbol_input = inputcol1.text_input("Enter Austere available trading symbol:", symbols['symbol'].unique() )
+    watchlist_input = inputcol2.selectbox("Symbol type:",symbols['type'].unique() )
+    submitted_sw = st.form_submit_button("Add symbol to watchlist")
+
+if submitted_sw:
+    addSymbolToWatchlist(symbol_input, watchlist_input)

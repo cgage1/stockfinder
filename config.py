@@ -1,3 +1,5 @@
 
-# desktop creds filepath 
+# desktop creds filepath and laptop
 creds_filepath = 'C:/Users/colto/Documents/creds.yaml'
+
+
