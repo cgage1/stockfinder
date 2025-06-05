@@ -10,12 +10,12 @@ st.title("Stock Price Behavior Around Dividend Ex-Dates")
 
 # Sidebar for user input
 st.sidebar.header("Stock Selection")
-ticker_symbol = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT)", "AAPL").upper()
+ticker_symbol = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT)", "MSTY").upper()
 start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2010-01-01"))
 end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
 
 # Function to fetch data and perform analysis
-@st.cache_data
+@st.cache_data(ttl='1 hour')
 def get_dividend_data(ticker, start, end):
     try:
         stock = yf.Ticker(ticker)
@@ -34,7 +34,7 @@ def get_dividend_data(ticker, start, end):
         end_ts_for_history = pd.Timestamp(end) + pd.Timedelta(days=1)
         
         # Fetch 'Open' and 'Close' prices
-        price_data = stock.history(start=start_ts_for_history, end=end_ts_for_history, actions=False) # actions=False to not get dividend/stock split columns here
+        price_data = stock.history(start=start_ts_for_history, end=end_ts_for_history, actions=False, auto_adjust=False) # actions=False to not get dividend/stock split columns here
         
         # IMMEDIATELY remove timezone from price_data index upon fetching
         if not price_data.empty and price_data.index.tz is not None:
@@ -97,6 +97,10 @@ def get_dividend_data(ticker, start, end):
             return None, "Could not find corresponding price data for all ex-dividend dates within the selected range."
 
         df_results = pd.DataFrame(results)
+        # Some custom calcs 
+        df_results["inv(Dividend Amount)"] =  df_results["Dividend Amount"]*(-1) 
+
+        # Set index 
         df_results.set_index("Ex-Dividend Date", inplace=True)
         return df_results, None
     except Exception as e:
@@ -156,7 +160,7 @@ elif df_dividend_analysis is not None and not df_dividend_analysis.empty:
         df_dividend_analysis,
         x="Difference from Dividend (Open vs Dividend)",
         nbins=20,
-        title="Distribution of Price Change (Open) Relative to Dividend Payout"
+        title="Distribution of [Dividend Payout + Price Change at Open] - WANT THIS TO BE A POSITIVE NUMBER "
     )
     fig_hist_open.update_layout(xaxis_title="Price Change at Open - Dividend Amount")
     c_col1.plotly_chart(fig_hist_open, use_container_width=True)
@@ -192,33 +196,46 @@ elif df_dividend_analysis is not None and not df_dividend_analysis.empty:
     fig_hist_open.update_layout(xaxis_title="Price Change at Close")
     c_col2.plotly_chart(fig_hist_open, use_container_width=True)
 
-    with c_col1:
-        # Box plot for Price Change at Open (Absolute)
-        fig_box_open = px.box(
-            df_dividend_analysis,
-            y="Price Change Open (Absolute)",
-            title="Price Change at Open (Absolute) Distribution",
-            points="all" # Show all data points as well
+    import pandas as pd
+    import numpy as np
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+    import plotly.graph_objects as go # Often useful for more granular control
+    df_melted = df_dividend_analysis.melt(
+        value_vars=["Price Change Open (Absolute)", "Price Change Close (Absolute)"],
+        var_name="Metric",
+        value_name="Absolute Price Change ($)"
         )
-        fig_box_open.update_layout(yaxis_title="Absolute Price Change ($)")
-        st.plotly_chart(fig_box_open, use_container_width=True)
 
-    with c_col2:
-        # Box plot for Price Change at Close (Absolute)
-        fig_box_close = px.box(
-            df_dividend_analysis,
-            y="Price Change Close (Absolute)",
-            title="Price Change at Close (Absolute) Distribution",
-            points="all" # Show all data points as well
-        )
-        fig_box_close.update_layout(yaxis_title="Absolute Price Change ($)")
-        st.plotly_chart(fig_box_close, use_container_width=True)
+    # Rename the 'Metric' values for better readability on the plot
+    df_melted["Metric"] = df_melted["Metric"].replace({
+        "Price Change Open (Absolute)": "At Open",
+        "Price Change Close (Absolute)": "At Close"
+    })
+
+    # 2. Create a single box plot using plotly.express.
+    fig = px.box(
+        df_melted,
+        x="Metric", # This will create separate box plots for each metric
+        y="Absolute Price Change ($)",
+        title="Comparison of Absolute Price Change at Open vs. Close",
+        points="all", # Show all individual data points
+        color="Metric" # Differentiate the box plots by color
+    )
+
+    # 3. Update the layout for clarity.
+    fig.update_layout(
+        yaxis_title="Absolute Price Change ($)", # Consistent y-axis title
+        # title_x=0.5, # Center the main title
+        showlegend=True # Legend is redundant when 'x' and 'color' are the same
+    )
+    st.plotly_chart(fig, use_container_width=True)
     
     # Line chart: Absolute Price Changes (Open vs Close) and Dividend Amount Over Time
     ts_col1, ts_col2 = st.columns(2)
     fig_line_abs_combined = px.line(
         df_dividend_analysis,
-        y=["Price Change Open (Absolute)", "Price Change Close (Absolute)", "Dividend Amount"],
+        y=["Price Change Open (Absolute)", "Price Change Close (Absolute)", "Dividend Amount","inv(Dividend Amount)"],
         title="Absolute Price Changes (Open & Close) and Dividend Amount Over Time",
         labels={
             "value": "Amount ($)",
