@@ -3,6 +3,9 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+import numpy as np
+from plotly.subplots import make_subplots
+ # Often useful for more granular control
 
 st.set_page_config(layout="wide", page_title="Dividend Ex-Date Price Analysis")
 
@@ -155,52 +158,39 @@ elif df_dividend_analysis is not None and not df_dividend_analysis.empty:
 
     st.subheader("Comparison of Price Change Distributions")
     c_col1,c_col2 = st.columns(2)
-    # Histogram for Price Change at Open vs Dividend Difference
-    fig_hist_open = px.histogram(
-        df_dividend_analysis,
-        x="Difference from Dividend (Open vs Dividend)",
-        nbins=20,
-        title="Distribution of [Dividend Payout + Price Change at Open] - WANT THIS TO BE A POSITIVE NUMBER "
+    
+
+    # BOX PLOTS FOr absolute Price Change at Open vs Close
+    df_melted = df_dividend_analysis.melt(
+        value_vars=["Difference from Dividend (Open vs Dividend)", "Difference from Dividend (Close vs Dividend)"],
+        var_name="Metric",
+        value_name="Dividend Price Change Difference ($)"
+        )
+
+    # Rename the 'Metric' values for better readability on the plot
+    df_melted["Metric"] = df_melted["Metric"].replace({
+        "Difference from Dividend (Open vs Dividend)",
+        "Difference from Dividend (Close vs Dividend)"
+    })
+
+    # 2. Create a single box plot using plotly.express.
+    fig = px.box(
+        df_melted,
+        x="Metric", # This will create separate box plots for each metric
+        y="Dividend Price Change Difference ($)",
+        title="Price Change + Dividend at Open vs. Close (want negavite values)",
+        points="all", # Show all individual data points
+        color="Metric" # Differentiate the box plots by color
     )
-    fig_hist_open.update_layout(xaxis_title="Price Change at Open - Dividend Amount")
-    c_col1.plotly_chart(fig_hist_open, use_container_width=True)
-
-    # Histogram for Price Change at Close vs Dividend Difference
-    fig_hist_close = px.histogram(
-        df_dividend_analysis,
-        x="Difference from Dividend (Close vs Dividend)",
-        nbins=20,
-        title="Distribution of Price Change (Close) Relative to Dividend Payout"
+    # 3. Update the layout for clarity.
+    fig.update_layout(
+        yaxis_title="Price Change ($)", # Consistent y-axis title
+        # title_x=0.5, # Center the main title
+        showlegend=True # Legend is redundant when 'x' and 'color' are the same
     )
-    fig_hist_close.update_layout(xaxis_title="Price Change at Close - Dividend Amount")
-    c_col2.plotly_chart(fig_hist_close, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Time Series of Price Changes and Dividend Payout")
-
-    # Histogram for Price Change at Open vs Dividend Difference
-    fig_hist_open = px.histogram(
-        df_dividend_analysis,
-        x="Price Change Open (Absolute)",
-        nbins=20,
-        title="Price Change Open (Absolute)"
-    )
-    fig_hist_open.update_layout(xaxis_title="Price Change at Open")
-    c_col1.plotly_chart(fig_hist_open, use_container_width=True)
-
-    fig_hist_open = px.histogram(
-        df_dividend_analysis,
-        x="Price Change Close (Absolute)",
-        nbins=20,
-        title="Price Change Close (Absolute)"
-    )
-    fig_hist_open.update_layout(xaxis_title="Price Change at Close")
-    c_col2.plotly_chart(fig_hist_open, use_container_width=True)
-
-    import pandas as pd
-    import numpy as np
-    import plotly.express as px
-    from plotly.subplots import make_subplots
-    import plotly.graph_objects as go # Often useful for more granular control
+    # BOX PLOTS FOr absolute Price Change at Open vs Close -------------------
     df_melted = df_dividend_analysis.melt(
         value_vars=["Price Change Open (Absolute)", "Price Change Close (Absolute)"],
         var_name="Metric",
@@ -225,12 +215,14 @@ elif df_dividend_analysis is not None and not df_dividend_analysis.empty:
 
     # 3. Update the layout for clarity.
     fig.update_layout(
-        yaxis_title="Absolute Price Change ($)", # Consistent y-axis title
+        yaxis_title="Price Change ($)", # Consistent y-axis title
         # title_x=0.5, # Center the main title
         showlegend=True # Legend is redundant when 'x' and 'color' are the same
     )
     st.plotly_chart(fig, use_container_width=True)
-    
+
+
+    #---------------------------------------------------------------#
     # Line chart: Absolute Price Changes (Open vs Close) and Dividend Amount Over Time
     ts_col1, ts_col2 = st.columns(2)
     fig_line_abs_combined = px.line(
