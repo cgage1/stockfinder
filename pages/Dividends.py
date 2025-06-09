@@ -239,9 +239,71 @@ def generate_multi_line_plot(df_high_res, yfield='Open'):
             annotation_position="top right"
         )
         # Update layout for better readability
-        ts_col1.plotly_chart(fig)
+        st.plotly_chart(fig)
     else:
         st.write("Cannot display chart: No high-resolution data available.")
+
+def generate_multi_line_plot_with_box_plots(df_high_res, yfield='Open', ts_col1=None):
+    if not df_high_res.empty:
+        # Create the line plot
+        fig = px.line(
+            df_high_res,
+            color='date_color',
+            x='sort_field',
+            y=yfield,
+            title=f'{ticker_symbol} Intraday Trends Around Ex-Dividend Dates',
+            hover_data=[yfield, 'Date', 'Time']
+        )
+
+        # Calculate division points and add vertical lines
+        x_min = df_high_res['sort_field'].min()
+        x_max = df_high_res['sort_field'].max()
+        x_range = x_max - x_min
+        section_size = x_range / 3
+        line1_x = x_min + section_size
+        line2_x = x_min + (section_size * 2)
+
+        fig.add_vline(
+            x=line1_x,
+            line_dash="dot",
+            opacity=0.5,
+            line_color="grey",
+            annotation_text="Ex Day Start",
+            annotation_position="top left"
+        )
+        fig.add_vline(
+            x=line2_x,
+            line_dash="dot",
+            opacity=0.5,
+            line_color="grey",
+            annotation_text="Ex Day End",
+            annotation_position="top right"
+        )
+
+        # Extract hour from 'Time' column and add it as a new column
+        df_high_res['Hour'] = df_high_res['Time'].apply(lambda t: t.hour)
+
+        # Add box plots for each hour
+        for hour in sorted(df_high_res['Hour'].unique()):
+            df_hour = df_high_res[df_high_res['Hour'] == hour]
+            fig.add_trace(go.Box(
+                y=df_hour[yfield],
+                x=df_hour['sort_field'],
+                name=f'{hour:02d}:00',
+                marker_color=px.colors.qualitative.Plotly[hour % 10], # Cycle through colors
+                showlegend=False # Avoid duplicate legends
+            ))
+        if ts_col1:
+            ts_col1.plotly_chart(fig)
+        else:
+            st.plotly_chart(fig)
+
+    else:
+        if ts_col1:
+            ts_col1.write("Cannot display chart: No high-resolution data available.")
+        else:
+            print("Cannot display chart: No high-resolution data available.")
+
 
 #------------------------------------------------------------#
 #--------------------------- MAIN ---------------------------#
@@ -374,6 +436,8 @@ with tab_single:
             generate_multi_line_plot(df_high_res, yfield='Open')
         with ts_col2:
             generate_multi_line_plot(df_high_res, yfield='Open_Relative_to_Start') # This will plot the new column we added
+        
+        generate_multi_line_plot_with_box_plots(df_high_res, yfield='Open_Relative_to_Start', ts_col1=None)
 
     else:
         st.info("Enter a stock ticker and select a date range to see the dividend analysis.")
