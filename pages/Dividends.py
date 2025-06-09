@@ -138,11 +138,12 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 
+@st.cache_data(ttl='6 hours')
 def get_intraday_stock_data(ticker: str, start_date, end_date, interval: str = "60m") -> pd.DataFrame:
     try:
         # Convert date strings to datetime objects
-        start_dt = start_date # datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = end_date # datetime.strptime(end_date, "%Y-%m-%d")
+        start_dt = start_date # Assuming start_date is already a datetime object
+        end_dt = end_date # Assuming end_date is already a datetime object
 
         # Calculate the difference in days
         delta = end_dt - start_dt
@@ -164,7 +165,7 @@ def get_intraday_stock_data(ticker: str, start_date, end_date, interval: str = "
                 adjusted_start_dt = start_dt
             start_date_yf = adjusted_start_dt.strftime("%Y-%m-%d")
         else:
-            start_date_yf = start_date
+            start_date_yf = start_date.strftime("%Y-%m-%d") # Ensure this is a string for yfinance
 
         # Fetch data
         data = yf.download(
@@ -181,13 +182,66 @@ def get_intraday_stock_data(ticker: str, start_date, end_date, interval: str = "
         
         if data.empty:
             print(f"No data found for {ticker} from {start_date} to {end_date} with interval {interval}.")
+            return pd.DataFrame()
+        
+        # --- Add the new column for relative difference ---
+        if 'Open' in data.columns and not data['Open'].empty:
+            first_open_value = data['Open'].iloc[0]
+            data['Open_Relative_to_Start'] = data['Open'] - first_open_value
+        else:
+            print(f"Warning: 'Open' column not found or is empty, cannot calculate relative difference.")
+            data['Open_Relative_to_Start'] = float('nan') # Add a column of NaNs if 'Open' is missing
+        # --- End of new column addition ---
+
         return data
         
-
     except Exception as e:
         print(f"An error occurred: {e}")
         return pd.DataFrame()
 
+def generate_multi_line_plot(df_high_res, yfield='Open'):
+    if not df_high_res.empty:
+        fig = px.line( # Using line for time series, scatter is also an option
+            df_high_res,
+            color='date_color', # Column name in df_high_res for coloring
+            x='sort_field',           # Column name in df_high_res for x-axis
+            y=yfield,           # Column name in df_high_res for y-axis
+            title=f'{ticker_symbol} Intraday Trends Around Ex-Dividend Dates',
+            hover_data=[yfield, 'Date', 'Time'] 
+        )
+        # --- 3. Calculate division points and add vertical lines ---
+
+        # Get the min and max of the x-axis ('sort_field')
+        x_min = df_high_res['sort_field'].min()
+        x_max = df_high_res['sort_field'].max()
+        x_range = x_max - x_min
+        section_size = x_range / 3
+        # Calculate the x-coordinates for the two vertical lines
+        line1_x = x_min + section_size
+        line2_x = x_min + (section_size * 2)
+
+        # Add the first vertical line
+        fig.add_vline(
+            x=line1_x,
+            line_dash="dot",
+            opacity=0.5,
+            line_color="grey", # Using red to distinguish from previous example
+            annotation_text="Ex Day Start", # Optional annotation
+            annotation_position="top left"
+        )
+        # Add the second vertical line
+        fig.add_vline(
+            x=line2_x,
+            line_dash="dot",
+            opacity=0.5,
+            line_color="grey", # Using green
+            annotation_text="Ex Day End", # Optional annotation
+            annotation_position="top right"
+        )
+        # Update layout for better readability
+        ts_col1.plotly_chart(fig)
+    else:
+        st.write("Cannot display chart: No high-resolution data available.")
 
 #------------------------------------------------------------#
 #--------------------------- MAIN ---------------------------#
@@ -283,13 +337,13 @@ with tab_single:
         all_high_res_dfs = []
 
         for sdate_ts in ex_dates_list: # sdate_ts will be a Timestamp object
-            # Convert Timestamp to string format for the get_intraday_stock_data function
             sdate_str = sdate_ts  #.strftime('%Y-%m-%d') 
             
             try:
-                # Assuming get_intraday_stock_data handles the date string correctly
-                df_high_res_i = get_intraday_stock_data(ticker_symbol, sdate_str, sdate_str)
-                
+                df_high_res_i = get_intraday_stock_data(ticker_symbol, sdate_str + timedelta(days=-1), sdate_str + timedelta(days=1))
+                df_high_res_i['sort_field'] = range(len(df_high_res_i))  # Add a sort field for consistent ordering
+
+
                 if not df_high_res_i.empty:
                     # Add 'date_color' column using the original Timestamp object for better grouping/coloring
                     # The Timestamp will be useful for plotting as well
@@ -314,21 +368,12 @@ with tab_single:
             print("No intraday data was retrieved for any of the dividend ex-dates.")
 
         # --- Plotting the high-resolution trends ---
-        st.dataframe(df_high_res)
         # create time column:
         df_high_res['Time'] = df_high_res['Date'].dt.time
-        if not df_high_res.empty:
-            fig = px.line( # Using line for time series, scatter is also an option
-                df_high_res,
-                color='date_color', # Column name in df_high_res for coloring
-                x='Time',           # Column name in df_high_res for x-axis
-                y='Open',           # Column name in df_high_res for y-axis
-                title=f'{ticker_symbol} Intraday Trends Around Ex-Dividend Dates'
-            )
-            ts_col1.plotly_chart(fig)
-        else:
-            st.write("Cannot display chart: No high-resolution data available.")
-
+        with ts_col1:
+            generate_multi_line_plot(df_high_res, yfield='Open')
+        with ts_col2:
+            generate_multi_line_plot(df_high_res, yfield='Open_Relative_to_Start') # This will plot the new column we added
 
     else:
         st.info("Enter a stock ticker and select a date range to see the dividend analysis.")
