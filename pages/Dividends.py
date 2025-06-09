@@ -134,6 +134,61 @@ def box_plot_compare(df, col1, col2, title):
     )
     st.plotly_chart(fig, use_container_width=True)
 
+import yfinance as yf
+import pandas as pd
+from datetime import datetime, timedelta
+
+def get_intraday_stock_data(ticker: str, start_date, end_date, interval: str = "60m") -> pd.DataFrame:
+    try:
+        # Convert date strings to datetime objects
+        start_dt = start_date # datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = end_date # datetime.strptime(end_date, "%Y-%m-%d")
+
+        # Calculate the difference in days
+        delta = end_dt - start_dt
+        period_days = delta.days + 1
+
+        if interval == "1m" and period_days > 7:
+            print(f"Warning: For '1m' interval, yfinance typically provides data for the last 7 days only.")
+            print(f"Adjusting period to 7 days from {end_date}.")
+            adjusted_start_dt = end_dt - timedelta(days=6)
+            # Ensure adjusted_start_dt is not before the original start_dt
+            if adjusted_start_dt < start_dt:
+                adjusted_start_dt = start_dt
+            start_date_yf = adjusted_start_dt.strftime("%Y-%m-%d")
+        elif interval in ["5m", "15m", "30m", "60m", "90m", "1h"] and period_days > 60:
+            print(f"Warning: For '{interval}' interval, yfinance typically provides data for up to 60 days.")
+            print(f"Adjusting period to 60 days from {end_date}.")
+            adjusted_start_dt = end_dt - timedelta(days=59)
+            if adjusted_start_dt < start_dt:
+                adjusted_start_dt = start_dt
+            start_date_yf = adjusted_start_dt.strftime("%Y-%m-%d")
+        else:
+            start_date_yf = start_date
+
+        # Fetch data
+        data = yf.download(
+            ticker,
+            start=start_date_yf,
+            end=(end_dt + timedelta(days=1)).strftime("%Y-%m-%d"), # yfinance `end` is exclusive
+            interval=interval,
+            auto_adjust=True  # Automatically adjust Open, High, Low, Close for dividends and splits
+        )
+        if isinstance(data.columns, pd.MultiIndex):
+            # This handles cases where yfinance might return (Ticker, Column_Name)
+            # We want to keep only the Column_Name
+            data.columns = [col[0] if isinstance(col, tuple) else col for col in data.columns]
+        
+        if data.empty:
+            print(f"No data found for {ticker} from {start_date} to {end_date} with interval {interval}.")
+        return data
+        
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return pd.DataFrame()
+
+
 #------------------------------------------------------------#
 #--------------------------- MAIN ---------------------------#
 #------------------------------------------------------------#
@@ -206,14 +261,74 @@ with tab_single:
         # Line chart: Percentage Price Changes (Open vs Close) Over Time
         fig_line_perc_combined = px.line(
             df_dividend_analysis,
-            y=["Price Change Open (%)", "Price Change Close (%)"],
-            title="Percentage Price Changes (Open & Close) Around Ex-Date Over Time",
-            labels={
-                "value": "Percentage Change (%)",
-                "variable": "Price Change Type"
-            }
+            y=["Difference from Dividend (Open vs Dividend)","Difference from Dividend (Close vs Dividend)"],
+            title="Difference from Dividend over Time"
         )
         ts_col2.plotly_chart(fig_line_perc_combined, use_container_width=True)
+
+ 
+        # ----------- Get high resolution trends --------------- #
+        # 3. Filter the list
+        ex_dates_list = sorted(df_dividend_analysis.index.tolist(), reverse=True)
+        current_date = datetime.today().date()
+
+        # Calculate two_years_ago as a datetime.datetime, then extract its date part
+        two_years_ago = (current_date - timedelta(days=2 * 365))
+
+        # Filter the list: Assuming 'date' in ex_dates_list is already a datetime.date object,
+        # compare it directly with the 'two_years_ago' date.
+        ex_dates_list = [date for date in ex_dates_list if date >= two_years_ago]
+
+        # Initialize an empty list to store DataFrames
+        all_high_res_dfs = []
+
+        for sdate_ts in ex_dates_list: # sdate_ts will be a Timestamp object
+            # Convert Timestamp to string format for the get_intraday_stock_data function
+            sdate_str = sdate_ts  #.strftime('%Y-%m-%d') 
+            
+            try:
+                # Assuming get_intraday_stock_data handles the date string correctly
+                df_high_res_i = get_intraday_stock_data(ticker_symbol, sdate_str, sdate_str)
+                
+                if not df_high_res_i.empty:
+                    # Add 'date_color' column using the original Timestamp object for better grouping/coloring
+                    # The Timestamp will be useful for plotting as well
+                    df_high_res_i['date_color'] = sdate_ts 
+                    
+                    # Reset index to make the 'Datetime' index a regular column, useful for plotting 'x' axis
+                    df_high_res_i = df_high_res_i.reset_index() 
+                    df_high_res_i.rename(columns={'Datetime': 'Date'}, inplace=True) # Rename for clarity
+                    
+                    all_high_res_dfs.append(df_high_res_i)
+                else:
+                    print(f"No data found for {ticker_symbol} on {sdate_str}. Skipping.")
+            except Exception as e: # Catch a more specific exception or at least log the error
+                print(f"An error occurred while fetching data for {sdate_str}: {e}")
+                continue
+        
+        # Concatenate all collected DataFrames into one
+        if all_high_res_dfs: # Check if the list is not empty
+            df_high_res = pd.concat(all_high_res_dfs, ignore_index=True) # ignore_index=True resets the index
+        else:
+            df_high_res = pd.DataFrame() # Create an empty DataFrame if no data was collected
+            print("No intraday data was retrieved for any of the dividend ex-dates.")
+
+        # --- Plotting the high-resolution trends ---
+        st.dataframe(df_high_res)
+        # create time column:
+        df_high_res['Time'] = df_high_res['Date'].dt.time
+        if not df_high_res.empty:
+            fig = px.line( # Using line for time series, scatter is also an option
+                df_high_res,
+                color='date_color', # Column name in df_high_res for coloring
+                x='Time',           # Column name in df_high_res for x-axis
+                y='Open',           # Column name in df_high_res for y-axis
+                title=f'{ticker_symbol} Intraday Trends Around Ex-Dividend Dates'
+            )
+            ts_col1.plotly_chart(fig)
+        else:
+            st.write("Cannot display chart: No high-resolution data available.")
+
 
     else:
         st.info("Enter a stock ticker and select a date range to see the dividend analysis.")
