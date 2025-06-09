@@ -243,19 +243,79 @@ def generate_multi_line_plot(df_high_res, yfield='Open'):
     else:
         st.write("Cannot display chart: No high-resolution data available.")
 
-def generate_multi_line_plot_with_box_plots(df_high_res, yfield='Open', ts_col1=None):
-    if not df_high_res.empty:
-        # Create the line plot
-        fig = px.line(
-            df_high_res,
-            color='date_color',
-            x='sort_field',
-            y=yfield,
-            title=f'{ticker_symbol} Intraday Trends Around Ex-Dividend Dates',
-            hover_data=[yfield, 'Date', 'Time']
-        )
 
-        # Calculate division points and add vertical lines
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px # Still useful for colors
+from datetime import datetime, timedelta
+import streamlit as st # Assuming you are using Streamlit based on ts_col1
+import numpy as np # For adding noise to sample data
+
+def generate_hourly_daily_distribution_plot(df_high_res, yfield='Open_Relative_to_Start', ticker_symbol="STOCK"):
+    if not df_high_res.empty:
+        # Initialize an empty Figure object
+        fig = go.Figure()
+
+        # Ensure 'Date' column is a string for consistent grouping and naming
+        if pd.api.types.is_datetime64_any_dtype(df_high_res['Date']):
+            df_high_res['Date'] = df_high_res['Date'].dt.strftime('%Y-%m-%d')
+
+
+        # Extract hour directly from the datetime.time object
+        df_high_res['Hour'] = df_high_res['Time'].apply(lambda t: t.hour)
+
+        # Get unique dates for consistent coloring (now guaranteed to be strings)
+        unique_dates_for_coloring = sorted(df_high_res['Date'].unique())
+        
+        # Add a placeholder trace for the legend if you want to show date colors
+        for i, date_str in enumerate(unique_dates_for_coloring):
+            color = px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+            fig.add_trace(go.Scatter(
+                x=[None], # No actual data, just for legend entry
+                y=[None],
+                mode='lines',
+                line=dict(color=color, width=2),
+                name=str(date_str), # <--- Changed this line: Convert to string
+                showlegend=True
+            ))
+
+        # Iterate through each date and then each hour within that date
+        for date_str in unique_dates_for_coloring:
+            df_day = df_high_res[df_high_res['Date'] == date_str].copy() # Use .copy() to avoid SettingWithCopyWarning
+            
+            # Calculate the mean sort_field for each hour within this specific day
+            hourly_mean_sort_field_for_day = df_day.groupby('Hour')['sort_field'].mean()
+
+            # Determine the color for this specific date (consistent with original line plot idea)
+            color_index = unique_dates_for_coloring.index(date_str)
+            current_day_color = px.colors.qualitative.Plotly[color_index % len(px.colors.qualitative.Plotly)]
+
+            for hour in sorted(df_day['Hour'].unique()):
+                df_hour_on_day = df_day[df_day['Hour'] == hour]
+                
+                # Check if there's data for this hour on this day
+                if not df_hour_on_day.empty:
+                    box_x_position = hourly_mean_sort_field_for_day.loc[hour]
+
+                    # Add Violin plot (or go.Box for box plots)
+                    fig.add_trace(go.Violin(
+                        y=df_hour_on_day[yfield],
+                        x=[box_x_position] * len(df_hour_on_day), # Single x-position for the violin/box
+                        name=f'{str(date_str)} - {hour:02d}:00', # Convert to string here too for consistency
+                        box_visible=True, # Show the box inside the violin
+                        meanline_visible=True, # Show the mean line
+                        line_color=current_day_color, # Outline color for the violin/box
+                        fillcolor=f'rgba{px.colors.hex_to_rgb(current_day_color) + (0.3,)}', # Semi-transparent fill
+                        opacity=0.8, # Overall opacity of the violin/box
+                        points='all', # Show all data points
+                        jitter=0.3, # Spread out points for better visibility
+                        marker=dict(color=current_day_color, size=3), # Color of individual points
+                        scalemode='width', # 'width' or 'count'
+                        scalegroup='hour', # Groups violins/boxes by hour so they are scaled relatively
+                        showlegend=False # Don't show individual violin/box legends
+                    ))
+
+        # Add vertical lines (calculated from the full df_high_res)
         x_min = df_high_res['sort_field'].min()
         x_max = df_high_res['sort_field'].max()
         x_range = x_max - x_min
@@ -279,30 +339,22 @@ def generate_multi_line_plot_with_box_plots(df_high_res, yfield='Open', ts_col1=
             annotation_text="Ex Day End",
             annotation_position="top right"
         )
+        
+        # Update layout
+        fig.update_layout(
+            title_text=f'{ticker_symbol} Intraday Distribution by Hour and Day',
+            xaxis_title="Time Offset (sort_field)",
+            yaxis_title=f"{yfield}",
+            hovermode="x unified",
+            xaxis_showgrid=True, # Show grid for x-axis
+            yaxis_showgrid=True, # Show grid for y-axis
+            violinmode='overlay', # 'group' or 'overlay'. 'overlay' is good here.
+        )
 
-        # Extract hour from 'Time' column and add it as a new column
-        df_high_res['Hour'] = df_high_res['Time'].apply(lambda t: t.hour)
+        st.plotly_chart(fig)
 
-        # Add box plots for each hour
-        for hour in sorted(df_high_res['Hour'].unique()):
-            df_hour = df_high_res[df_high_res['Hour'] == hour]
-            fig.add_trace(go.Box(
-                y=df_hour[yfield],
-                x=df_hour['sort_field'],
-                name=f'{hour:02d}:00',
-                marker_color=px.colors.qualitative.Plotly[hour % 10], # Cycle through colors
-                showlegend=False # Avoid duplicate legends
-            ))
-        if ts_col1:
-            ts_col1.plotly_chart(fig)
-        else:
-            st.plotly_chart(fig)
 
-    else:
-        if ts_col1:
-            ts_col1.write("Cannot display chart: No high-resolution data available.")
-        else:
-            print("Cannot display chart: No high-resolution data available.")
+
 
 
 #------------------------------------------------------------#
@@ -433,11 +485,12 @@ with tab_single:
         # create time column:
         df_high_res['Time'] = df_high_res['Date'].dt.time
         with ts_col1:
-            generate_multi_line_plot(df_high_res, yfield='Open')
-        with ts_col2:
             generate_multi_line_plot(df_high_res, yfield='Open_Relative_to_Start') # This will plot the new column we added
+        with ts_col2:
+            generate_multi_line_plot(df_high_res, yfield='Open')
         
-        generate_multi_line_plot_with_box_plots(df_high_res, yfield='Open_Relative_to_Start', ts_col1=None)
+        
+        generate_hourly_daily_distribution_plot(df_high_res, yfield='Open_Relative_to_Start', ticker_symbol=ticker_symbol)
 
     else:
         st.info("Enter a stock ticker and select a date range to see the dividend analysis.")
