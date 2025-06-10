@@ -1,94 +1,136 @@
-# Custom monitoring page 
+import streamlit as st
 import yfinance as yf
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime, timedelta
 
-def get_stock_data_and_plot(ticker_symbol, n_days=30, plot_res_dpi=300):
+def get_stock_data(ticker_symbol, n_days):
     """
-    Fetches the current price and historical data for the last N days,
-    then plots the closing price with high resolution.
+    Fetches the current price and historical data for a given stock ticker
+    for the last N days.
+    """
+    stock_info = {}
+    historical_data = pd.DataFrame()
 
-    Args:
-        ticker_symbol (str): The stock ticker symbol (e.g., "AAPL").
-        n_days (int): The number of past days to retrieve historical data for.
-        plot_res_dpi (int): Dots per inch for the plot, for high resolution.
-    """
-    
-    # 1. Get the current price
     try:
+        # Create a Ticker object
         stock = yf.Ticker(ticker_symbol)
+
+        # Get current info, including real-time price
         info = stock.info
-        current_price = info.get('regularMarketPrice') 
-        
+        current_price = info.get('regularMarketPrice')
+
+        # Fallback for current price if 'regularMarketPrice' is not available
         if not current_price:
-            # Fallback to the last closing price if regularMarketPrice isn't directly available
             hist_current_day = stock.history(period='1d')
             if not hist_current_day.empty:
                 current_price = hist_current_day['Close'].iloc[-1]
             else:
-                current_price = "N/A" # Indicate price couldn't be fetched
-        
-        print(f"Current price of {ticker_symbol}: ${current_price}")
+                current_price = "N/A"
+
+        stock_info['current_price'] = current_price
+        stock_info['company_name'] = info.get('longName', ticker_symbol) # Get full company name
+
+        # Fetch historical data
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=n_days)
+        historical_data = yf.download(ticker_symbol, start=start_date, end=end_date)
+
+        # Add the current price to the historical data for plotting if applicable
+        if isinstance(current_price, (int, float)) and current_price != "N/A":
+            # Ensure the index is a DatetimeIndex
+            current_price_series = pd.Series([current_price], index=[end_date])
+            # Concatenate and remove potential duplicates (e.g., if market is closed and last
+            # historical day is today)
+            historical_data['Close'] = pd.concat([historical_data['Close'], current_price_series]).sort_index()
+            historical_data = historical_data[~historical_data.index.duplicated(keep='last')]
 
     except Exception as e:
-        print(f"Error fetching current price for {ticker_symbol}: {e}")
-        current_price = "Error"
+        st.error(f"Error fetching data for {ticker_symbol}: {e}. Please check the ticker symbol.")
+        return None, None
 
-    # 2. Get historical data for the last N days
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=n_days)
+    return stock_info, historical_data
 
-    try:
-        hist_data = yf.download(ticker_symbol, start=start_date, end=end_date)
-        if hist_data.empty:
-            print(f"No historical data found for {ticker_symbol} in the last {n_days} days.")
-            return
-    except Exception as e:
-        print(f"Error fetching historical data for {ticker_symbol}: {e}")
+def plot_stock_data(historical_data, ticker_symbol, company_name):
+    """
+    Generates a Plotly line chart for the stock's closing prices.
+    """
+    if historical_data.empty:
+        st.warning("No historical data to plot.")
         return
 
-    # 3. Prepare data for plotting
-    # We only care about the 'Close' price for this plot
-    plot_data = hist_data['Close']
-    
-    # Add the current price as the last data point if it's available and valid
-    if isinstance(current_price, (int, float)) and current_price != "N/A":
-        # Create a new index for the current price (today's date)
-        # Use end_date as the index for the current price point
-        current_price_series = pd.Series([current_price], index=[end_date])
-        # Concatenate, dropping duplicates in case the last historical entry is for today
-        plot_data = pd.concat([plot_data, current_price_series]).sort_index()
-        plot_data = plot_data[~plot_data.index.duplicated(keep='last')]
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=historical_data.index, 
+        y=historical_data['Close'], 
+        mode='lines', 
+        name=f'{ticker_symbol} Closing Price',
+        line=dict(color='blue', width=2)
+    ))
+
+    fig.update_layout(
+        title=f'{company_name} ({ticker_symbol}) Stock Price',
+        xaxis_title='Date',
+        yaxis_title='Price (USD)',
+        hovermode="x unified", # Shows all y-values at a given x on hover
+        template="plotly_white", # Clean white background
+        xaxis_rangeslider_visible=True, # Add a range slider for easier navigation
+        height=600 # Set a fixed height for better display in Streamlit
+    )
+
+    # Customize x-axis ticks for better readability
+    fig.update_xaxes(
+        rangeselector=dict(
+            buttons=list([
+                dict(count=7, label="1w", step="day", stepmode="backward"),
+                dict(count=1, label="1m", step="month", stepmode="backward"),
+                dict(count=3, label="3m", step="month", stepmode="backward"),
+                dict(count=6, label="6m", step="month", stepmode="backward"),
+                dict(count=1, label="1y", step="year", stepmode="backward"),
+                dict(step="all")
+            ])
+        ),
+        type="date"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
 
-    # 4. Plot the data
-    plt.figure(figsize=(14, 7), dpi=plot_res_dpi) # Set figure size and DPI for high resolution
-    plt.plot(plot_data.index, plot_data.values, label=f'{ticker_symbol} Closing Price', color='blue', linewidth=1.5)
+# --- Streamlit App Layout ---
+st.set_page_config(layout="centered", page_title="Stock Price Viewer", page_icon="📈")
 
-    plt.title(f'{ticker_symbol} Stock Price - Last {n_days} Days', fontsize=16)
-    plt.xlabel('Date', fontsize=12)
-    plt.ylabel('Price (USD)', fontsize=12)
-    
-    # Format x-axis for better readability of dates
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    plt.gca().xaxis.set_major_locator(mdates.AutoLocator())
-    plt.gcf().autofmt_xdate() # Auto-format date labels to prevent overlap
+st.title("📈 Stock Price Viewer")
 
-    plt.grid(True, linestyle='--', alpha=0.0) # Light grid for readability
-    plt.legend()
-    plt.tight_layout() # Adjust layout to prevent labels from being cut off
-    plt.show()
+st.markdown("""
+This app retrieves current stock prices and plots historical closing prices
+using `yfinance` for data and `Plotly` for interactive visualizations.
+""")
 
-# Example Usage:
-ticker_symbol = "GOOGL"  # Google (Class A)
-num_days = 90          # Last 90 days
-plot_resolution = 300  # 300 DPI for high resolution
+# Sidebar for user inputs
+st.sidebar.header("Input Parameters")
+ticker_input = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT, GOOGL)", "AAPL").upper()
+num_days_input = st.sidebar.slider("Number of Historical Days to Show", 7, 365, 90)
 
-get_stock_data_and_plot(ticker_symbol, num_days, plot_resolution)
+if ticker_input:
+    st.header(f"Data for {ticker_input}")
 
-# Another example
-ticker_symbol_2 = "AMZN" # Amazon
-num_days_2 = 180
-get_stock_data_and_plot(ticker_symbol_2, num_days_2)
+    # Fetch data
+    stock_info, historical_data = get_stock_data(ticker_input, num_days_input)
+
+    if stock_info and not historical_data.empty:
+        st.subheader(f"Current Price: ${stock_info['current_price']:.2f}" if isinstance(stock_info['current_price'], (int, float)) else f"Current Price: {stock_info['current_price']}")
+        
+        st.subheader("Historical Price Chart")
+        plot_stock_data(historical_data, ticker_input, stock_info['company_name'])
+        
+        st.subheader("Raw Historical Data")
+        st.dataframe(historical_data[['Open', 'High', 'Low', 'Close', 'Volume']].tail(10)) # Show last 10 rows
+
+    elif stock_info is None and not historical_data:
+        st.info("Please enter a valid ticker symbol.")
+else:
+    st.info("Please enter a stock ticker symbol to get started!")
+
+st.markdown("---")
+st.markdown("Developed by Gemini AI for stock data visualization.")
