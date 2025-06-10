@@ -1,11 +1,14 @@
+yield_max_weekly = ['CHPY','GPTY','LFGY','QDTY','RDTY','SDTY','ULTY','YMAG','YMAX']
+yield_max_groupa = ['CRSH','FEAT','FIVY','GOOY','OARK','SNOY','TSLY','TSMY','XOMO','YBIT']
+yield_max_groupb = ['BABO','DIPS','FBY','GDXY','JPMO','MARO','MRNY','NVDY','PLTY','HOOY']
+yield_max_groupc = ['ABNY','AMDY','CONY','CVNY','FIAT','MSFO','NFLY','PYPY','XYZY','YQQQ']
+yield_max_groupd = ['AIYY','AMZY','APLY','DISO','MSTY','SMCY','WNTR','XYZY','YQQQ','']
+others = ['O','SCHD']
 
-nav_erosion_stocks_weekly = ['CHPY','GPTY','LFGY','QDTY','RDTY','SDTY','ULTY','YMAG','YMAX']
-nav_erosion_stocks_a = ['CRSH','FEAT','FIVY','GOOY','OARK','SNOY','TSLY','TSMY','XOMO','YBIT']
-nav_erosion_stocks_b = ['BABO','DIPS','FBY','GDXY','JPMO','MARO','MRNY','NVDY','PLTY','HOOY']
-nav_erosion_stocks_c = ['ABNY','AMDY','CONY','CVNY','FIAT','MSFO','NFLY','PYPY','XYZY','YQQQ']
-nav_erosion_stocks_d = ['AIYY','AMZY','APLY','DISO','MSTY','SMCY','WNTR','XYZY','YQQQ','']
-nav_erosion_stocks = {'nav_erosion_stocks_weekly': nav_erosion_stocks_weekly,
-                      'nav_erosion_stocks_a': nav_erosion_stocks_a,
-                      'nav_erosion_stocks_b': nav_erosion_stocks_b,
-                      'nav_erosion_stocks_c': nav_erosion_stocks_c,
-                      'nav_erosion_stocks_d': nav_erosion_stocks_d}
+# All NAV erosion stocks combined 
+nav_erosion_stocks = {'Yield Max Group Weekly': yield_max_weekly,
+                      'Yield Max Group A': yield_max_groupa,
+                      'Yield Max Group B': yield_max_groupb,
+                      'Yield Max Group C': yield_max_groupc,
+                      'Yield Max Group D': yield_max_groupd,
+                      'Others': others}
