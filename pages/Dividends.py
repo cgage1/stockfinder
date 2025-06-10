@@ -498,7 +498,8 @@ with tab_single:
 with tab_multi:
     choose_stock_list = st.selectbox('Select list of interest',stock_lists.nav_erosion_stocks.keys(), index=0)
     selected_stocks = stock_lists.nav_erosion_stocks[choose_stock_list]
-    if st.button("Analyze Selected Stocks"):
+    lc1,lc2,lc3 = st.columns([1,1,2])
+    if lc1.button("Analyze Selected Stocks"):
         for stock in selected_stocks:
             df_dividend_analysis, error_message = get_dividend_data(stock, start_date, end_date)
             if error_message:
@@ -509,4 +510,4 @@ with tab_multi:
                             f"[{stock}]Comparison of Price Change + Dividend at Open vs. Close")
             else:
                 st.info(f"No dividend data found for {stock} in the selected period.")
-
+    lc2.link_button("Go to Yield Max Schedule", "https://www.yieldmaxetfs.com/distribution-schedule/") 
