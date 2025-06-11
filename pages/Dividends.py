@@ -132,6 +132,8 @@ def box_plot_compare(df, col1, col2, title):
         yaxis_title="Price Change ($)",  # Consistent y-axis title
         showlegend=True  # Legend is redundant when 'x' and 'color' are the same
     )
+    # Add a horizontal line at y=0
+    fig.add_hline(y=0, line_dash="dot", line_color="red", annotation_text="",opacity=0.25, annotation_position="bottom right")
     st.plotly_chart(fig, use_container_width=True)
 
 import yfinance as yf
