@@ -192,7 +192,6 @@ def retrieve_alert_details(ticker_input):
 def create_monitor_card(ticker_input):
     with st.container(border=True):
         if ticker_input:
-            
             # Fetch data
             stock_info, historical_data = get_stock_data_high_resolution(ticker_input, num_days_input)
             
