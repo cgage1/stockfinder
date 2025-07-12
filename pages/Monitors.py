@@ -159,36 +159,38 @@ def plot_stock_data(historical_data, ticker_symbol, company_name, lower_limit, u
         hovermode="x unified", # Shows all y-values at a given x on hover
         template="plotly_white", # Clean white background
         xaxis_rangeslider_visible=False, # Add a range slider for easier navigation
-        height=600 # Set a fixed height for better display in Streamlit
+        height=300 # Set a fixed height for better display in Streamlit
     )
 
     # Customize x-axis ticks for better readability
-    fig.update_xaxes(
-        rangeselector=dict(
-            buttons=list([
-                dict(count=7, label="1w", step="day", stepmode="backward"),
-                dict(count=1, label="1m", step="month", stepmode="backward"),
-                dict(count=3, label="3m", step="month", stepmode="backward"),
-                dict(count=6, label="6m", step="month", stepmode="backward"),
-                dict(count=1, label="1y", step="year", stepmode="backward"),
-                dict(step="all")
-            ])
-        ),
-        type="date"
-    )
+    # fig.update_xaxes(
+    #     rangeselector=dict(
+    #         buttons=list([
+    #             dict(count=7, label="1w", step="day", stepmode="backward"),
+    #             dict(count=1, label="1m", step="month", stepmode="backward"),
+    #             dict(count=3, label="3m", step="month", stepmode="backward"),
+    #             dict(count=6, label="6m", step="month", stepmode="backward"),
+    #             dict(count=1, label="1y", step="year", stepmode="backward"),
+    #             dict(step="all")
+    #         ])
+    #     ),
+    #     type="date"
+    # )
 
     st.plotly_chart(fig, use_container_width=True)
 
 def retrieve_alert_details(ticker_input):
     """Returns a dict if alerts exist for this ticker"""
     try:
-        alert_dict = getattr(alerts, f"alert_{ticker_input}".lower())
+        alert_dict = alerts.stock_alerts_dict[ticker_input.upper()]
+        
         return alert_dict
     except Exception as e:
-        #st.write(e)
+        st.write(e)
         return None 
 
-@st.fragment(run_every=100) 
+# uncomment this for production reruns 
+# @st.fragment(run_every=100) 
 def create_monitor_card(ticker_input):
     with st.container(border=True):
         if ticker_input:
@@ -204,7 +206,8 @@ def create_monitor_card(ticker_input):
 
             if stock_info and not historical_data.empty:
                 mc0,mc1,mc2,mc3 = st.columns(4, vertical_alignment='top')
-                mc0.subheader(f"{ticker_input}")
+                timestamp_str = str(max(historical_data.index)).replace('+00:00','')
+                mc0.write(f"**{ticker_input}**<br> {timestamp_str} ", unsafe_allow_html=True)
                 mc1.metric("Current Price", f"${stock_info['current_price']:.2f}", border=False)
                 if alert_data is not None: # show alerts if they exist 
                     mc2.metric("Lower Alert", f"${lower_limit:.2f}", border=False, delta = lower_limit_delta, delta_color='normal')
@@ -230,13 +233,19 @@ st.title("📈 Stock Price Viewer + Alerting")
 
 # Sidebar for user inputs
 st.sidebar.header("Input Parameters")
-ticker_input = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT, GOOGL)", "MSTY").upper()
-ticker_input = st.sidebar.text_input("Enter Stock Ticker2 (e.g., AAPL, MSFT, GOOGL)", "MSTY").upper()
-num_days_input = st.sidebar.slider("Number of Historical Days to Show", 7, 365, 30)
+#ticker_input = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT, GOOGL)", "MSTY").upper()
+#ticker_input = st.sidebar.text_input("Enter Stock Ticker2 (e.g., AAPL, MSFT, GOOGL)", "MSTY").upper()
+num_days_input = st.sidebar.slider("Number of Historical Days to Show", 7, 365, 14)
 
-main_col1,main_col2 = st.columns(2)
-with main_col1:
-    create_monitor_card(ticker_input)
-with main_col2:
-    create_monitor_card('MSTR')
+# Loop through and display
+main_col1, main_col2 = st.columns(2)
+for i, ticker in enumerate(alerts.stock_alerts_dict):
+    if i % 2 == 0:  # Even index, put in main_col1
+        with main_col1:
+            create_monitor_card(ticker)
+    else:  # Odd index, put in main_col2
+        with main_col2:
+            create_monitor_card(ticker)
+
+
 
