@@ -189,6 +189,16 @@ def retrieve_alert_details(ticker_input):
         st.write(e)
         return None 
 
+def convert_date_to_tz(datetime_value):
+    """Inputs datetime value from pandas and output date time in pst"""
+    timestamp_str_utc_naive = str(datetime_value)[:19].replace('+00:00','')
+    dt_naive_utc = datetime.strptime(timestamp_str_utc_naive, '%Y-%m-%d %H:%M:%S')
+    utc_tz = pytz.utc
+    dt_utc_aware = utc_tz.localize(dt_naive_utc)
+    pst_tz = pytz.timezone('America/Los_Angeles') # Handles PST/PDT transitions
+    return dt_utc_aware.astimezone(pst_tz)
+
+import pytz 
 # uncomment this for production reruns 
 # @st.fragment(run_every=100) 
 def create_monitor_card(ticker_input):
@@ -206,8 +216,11 @@ def create_monitor_card(ticker_input):
 
             if stock_info and not historical_data.empty:
                 mc0,mc1,mc2,mc3 = st.columns(4, vertical_alignment='top')
-                timestamp_str = str(max(historical_data.index)).replace('+00:00','')
-                mc0.write(f"**{ticker_input}**<br> {timestamp_str} ", unsafe_allow_html=True)
+                # Timestamp convert  
+                dt_pst = convert_date_to_tz(max(historical_data.index))
+
+                # column data    
+                mc0.write(f"**{ticker_input}**<br> {dt_pst} ", unsafe_allow_html=True)
                 mc1.metric("Current Price", f"${stock_info['current_price']:.2f}", border=False)
                 if alert_data is not None: # show alerts if they exist 
                     mc2.metric("Lower Alert", f"${lower_limit:.2f}", border=False, delta = lower_limit_delta, delta_color='normal')
