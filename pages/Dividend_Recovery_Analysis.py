@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
 from plotly.subplots import make_subplots
-import stock_lists
+import db.stock_lists as stock_lists
  # Often useful for more granular control
 
 st.set_page_config(layout="wide", page_title="Dividend Ex-Date Price Analysis")
