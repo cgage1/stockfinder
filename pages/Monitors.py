@@ -3,9 +3,19 @@ import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime, timedelta
-import alerts 
+import bin.alerts as alerts  
+import pytz 
 
-def get_stock_data_high_resolution(ticker_symbol, n_days, interval='1h'):
+# Session vars: (these are preserved between runs)
+if 'active_alerts' not in st.session_state:
+    active_alerts = {
+        key: value for key, value in alerts.stock_alerts_dict.items()
+        if value.get('active') == 1
+        }
+    st.session_state.active_alerts = active_alerts
+
+
+def get_stock_data_high_resolution(ticker_symbol, n_days, interval='1m'):
     """
     Fetches high-resolution historical data and the current price for a given stock ticker.
 
@@ -198,15 +208,35 @@ def convert_date_to_tz(datetime_value):
     pst_tz = pytz.timezone('America/Los_Angeles') # Handles PST/PDT transitions
     return dt_utc_aware.astimezone(pst_tz)
 
-import pytz 
+def check_alert_value(ticker_input, current_price):
+    """Checks single stock input and returns notification if out of bounds"""
+    alert_data = retrieve_alert_details(ticker_input)
+    if current_price > alert_data['upper_limit']:
+        differential = current_price - alert_data['upper_limit']
+        return f'**{ticker_input}** : Upper bound alert ~ Price: **{round(current_price,2)}**, Upper limit: **{alert_data['upper_limit']}**, **@${round(differential,2)}** diff '
+    elif current_price > alert_data['upper_limit']:
+        return f'**{ticker_input}** : Lower bound alert'
+    else: 
+        return None 
+
+def get_all_current_alerts():
+    for ticker in st.session_state.active_alerts:
+        alert_string = check_alert_value(ticker, st.session_state.active_alerts[ticker.upper()]['current_price'])
+        if alert_string is not None:
+            st.info(alert_string)
+                
 # uncomment this for production reruns 
-# @st.fragment(run_every=100) 
+@st.fragment(run_every=60) 
 def create_monitor_card(ticker_input):
     with st.container(border=True):
         if ticker_input:
             # Fetch data
             stock_info, historical_data = get_stock_data_high_resolution(ticker_input, num_days_input)
-            
+
+            # Cache current price for alerts: 
+            st.session_state.active_alerts[ticker_input.upper()]['current_price'] = stock_info['current_price']
+
+
             # Check for any alerts 
             alert_data = retrieve_alert_details(ticker_input)
             lower_limit         = None if alert_data is None else alert_data['lower_limit']
@@ -248,17 +278,18 @@ st.title("📈 Stock Price Viewer + Alerting")
 st.sidebar.header("Input Parameters")
 #ticker_input = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT, GOOGL)", "MSTY").upper()
 #ticker_input = st.sidebar.text_input("Enter Stock Ticker2 (e.g., AAPL, MSFT, GOOGL)", "MSTY").upper()
-num_days_input = st.sidebar.slider("Number of Historical Days to Show", 7, 365, 14)
+num_days_input = st.sidebar.slider("Number of Historical Days to Show", 1, 90, 5)
 
-# Loop through and display
+# Loop through and display ACTIVE alerts only 
+top_row,top_row_c2 = st.columns(2)
 main_col1, main_col2 = st.columns(2)
-for i, ticker in enumerate(alerts.stock_alerts_dict):
+for i, ticker in enumerate(st.session_state.active_alerts):
     if i % 2 == 0:  # Even index, put in main_col1
         with main_col1:
             create_monitor_card(ticker)
     else:  # Odd index, put in main_col2
         with main_col2:
             create_monitor_card(ticker)
-
-
+with top_row:
+    get_all_current_alerts()
 
