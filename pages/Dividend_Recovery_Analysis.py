@@ -15,7 +15,7 @@ st.title("Stock Price Behavior Around Dividend Ex-Dates")
 # Sidebar for user input
 st.sidebar.header("Stock Selection")
 ticker_symbol = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT)", "MSTY").upper()
-start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2010-01-01"))
+start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2020-01-01"))
 end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
 
 # Function to fetch data and perform analysis
@@ -112,14 +112,20 @@ def get_dividend_data(ticker, start, end):
 
 # BOX PLOTS FOr absolute Price Change at Open vs Close
 def box_plot_compare(df, col1, col2, title):
-    df_melted = df.melt(
+    df['Difference'] = df[col2] - df[col1]
+
+    df_melted = df.melt(    
         value_vars=[col1, col2],
         var_name="Metric",
         value_name="Price Change ($)"
     )
     # Rename the 'Metric' values for better readability on the plot
-    df_melted["Metric"] = df_melted["Metric"].replace({col1: "At Open", col2: "At Close"})
-
+    df_melted["Metric"] = df_melted["Metric"].replace({
+            col1: "At Open",
+            col2: "At Close",
+            "Difference": "Close - Open Difference" # New label for the difference
+        })
+    
     fig = px.box(
         df_melted,
         x="Metric",  # This will create separate box plots for each metric

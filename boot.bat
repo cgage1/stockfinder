@@ -5,6 +5,10 @@ python -m streamlit run C:\Users\colto\OneDrive\Documents\stockfinder\Home.py
 
 
 
+:: Huwaie laptop:
+C:\Users\colto\OneDrive\Documents\aptio_env\Scripts\activate
+python -m streamlit run C:\Users\colto\Documents\stockfinder\Home.py
+
 
 :: work comp 
 
