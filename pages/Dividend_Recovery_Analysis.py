@@ -6,6 +6,7 @@ import plotly.express as px
 import numpy as np
 from plotly.subplots import make_subplots
 import db.stock_lists as stock_lists
+import io 
  # Often useful for more granular control
 
 st.set_page_config(layout="wide", page_title="Dividend Ex-Date Price Analysis")
@@ -111,36 +112,170 @@ def get_dividend_data(ticker, start, end):
         return None, f"Error fetching data: {e}"
 
 # BOX PLOTS FOr absolute Price Change at Open vs Close
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go # Import graph_objects for adding traces
+import streamlit as st
+import io
+from scipy.stats import t # Import t for Student's t-distribution calculations
+
 def box_plot_compare(df, col1, col2, title):
+    """
+    Generates a box plot comparing two columns and their difference,
+    and calculates normal distribution metrics for each, displaying them
+    directly on the plot. It also adds the cumulative probability of a
+    value being greater than 0, assuming a Student's t-distribution.
+    The plot is rendered directly using Streamlit.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        col1 (str): The name of the first column for comparison (e.g., 'At Open').
+        col2 (str): The name of the second column for comparison (e.g., 'At Close').
+        title (str): The title for the plotly chart.
+    """
+    # Calculate the 'Difference' column
     df['Difference'] = df[col2] - df[col1]
 
-    df_melted = df.melt(    
+    # Melt the DataFrame for plotting
+    df_melted = df.melt(
         value_vars=[col1, col2, 'Difference'],
         var_name="Metric",
         value_name="Price Change ($)"
     )
     # Rename the 'Metric' values for better readability on the plot
-    df_melted["Metric"] = df_melted["Metric"].replace({
-            col1: "At Open",
-            col2: "At Close",
-            "Difference": "Close - Open Difference" # New label for the difference
-        })
-    
+    metric_labels = {
+        col1: "At Open",
+        col2: "At Close",
+        "Difference": "Close - Open Difference"
+    }
+    df_melted["Metric"] = df_melted["Metric"].replace(metric_labels)
+
+    # Create the box plot
     fig = px.box(
         df_melted,
-        x="Metric",  # This will create separate box plots for each metric
+        x="Metric",
         y="Price Change ($)",
         title=title,
-        points="all",  # Show all individual data points
-        color="Metric"  # Differentiate the box plots by color
+        points="all", # Show all individual data points
+        color="Metric" # Differentiate the box plots by color
     )
     fig.update_layout(
-        yaxis_title="Price Change ($)",  # Consistent y-axis title
-        showlegend=True  # Legend is redundant when 'x' and 'color' are the same
+        yaxis_title="Price Change ($)", # Consistent y-axis title
+        showlegend=True # Legend is redundant when 'x' and 'color' are the same
     )
     # Add a horizontal line at y=0
-    fig.add_hline(y=0, line_dash="dot", line_color="red", annotation_text="",opacity=0.25, annotation_position="bottom right")
+    fig.add_hline(y=0, line_dash="dot", line_color="red", annotation_text="", opacity=0.25, annotation_position="bottom right")
+
+    # --- Calculate and Add Normal Distribution Metrics to the Plot ---
+    metrics_to_analyze = {
+        "At Open": df[col1],
+        "At Close": df[col2],
+        "Close - Open Difference": df['Difference']
+    }
+
+    for original_col_name, data_series in metrics_to_analyze.items():
+        # Get the corresponding label used in the plot
+        metric_label = metric_labels[original_col_name] if original_col_name in metric_labels else original_col_name
+
+        mean_val = data_series.mean()
+        std_val = data_series.std() # Sample standard deviation
+
+        # Find the x-axis position for the current metric label
+        x_pos = metric_label # Use the label directly as x-coordinate for categorical axis
+
+        # Add mean marker
+        fig.add_trace(
+            go.Scatter(
+                x=[x_pos],
+                y=[mean_val],
+                mode='markers',
+                marker=dict(symbol='star', size=12, color='black'),
+                name=f'{metric_label} Mean',
+                showlegend=True
+            )
+        )
+
+        # Add standard deviation markers
+        std_dev_points = [
+            mean_val - 3 * std_val, mean_val - 2 * std_val, mean_val - std_val,
+            mean_val + std_val, mean_val + 2 * std_val, mean_val + 3 * std_val
+        ]
+        std_dev_labels = [
+            '-3σ', '-2σ', '-1σ',
+            '+1σ', '+2σ', '+3σ'
+        ]
+
+        for i, val in enumerate(std_dev_points):
+            fig.add_trace(
+                go.Scatter(
+                    x=[x_pos],
+                    y=[val],
+                    mode='markers',
+                    marker=dict(symbol='circle', size=8, color='grey', line=dict(width=1, color='DarkSlateGrey')),
+                    name=f'{metric_label} {std_dev_labels[i]}',
+                    showlegend=True
+                )
+            )
+
+        # --- Calculate and Add Cumulative Probability (P(X > 0)) using Student's t-distribution ---
+        n = len(data_series)
+        if std_val > 0 and n > 1: # Ensure std_dev is not 0 and enough data for df > 0
+            df_t = n - 1 # Degrees of freedom for t-distribution
+            std_err = std_val / (n**0.5) # Standard error of the mean
+
+            if std_err == 0: # Handle cases where std_err might be 0 (e.g., if std_val was tiny)
+                if mean_val > 0:
+                    prob_greater_than_zero = 1.0
+                else:
+                    prob_greater_than_zero = 0.0
+            else:
+                t_statistic = (0 - mean_val) / std_err
+                prob_greater_than_zero = 1 - t.cdf(t_statistic, df=df_t)
+
+            annotation_text = f'P(X > 0) (t-dist): {prob_greater_than_zero:.2%}'
+
+            # Add annotation to the plot
+            fig.add_annotation(
+                x=x_pos,
+                y=df_melted["Price Change ($)"].max() * 1.05, # Position slightly above the max y-value of the data
+                text=annotation_text,
+                showarrow=False,
+                yshift=10, # Shift up slightly
+                font=dict(size=10, color="darkblue"),
+                bgcolor="rgba(255, 255, 255, 0.7)", # Semi-transparent background
+                bordercolor="darkblue",
+                borderwidth=1,
+                borderpad=4,
+                xref="x",
+                yref="y"
+            )
+        else:
+            # Handle cases where std_dev is 0 or not enough data for t-dist (n <= 1)
+            if mean_val > 0:
+                annotation_text = 'P(X > 0): 100.00%'
+            elif mean_val == 0:
+                annotation_text = 'P(X > 0): 0.00%'
+            else:
+                annotation_text = 'P(X > 0): 0.00%'
+
+            fig.add_annotation(
+                x=x_pos,
+                y=df_melted["Price Change ($)"].max() * 1.05,
+                text=annotation_text,
+                showarrow=False,
+                yshift=10,
+                font=dict(size=10, color="darkblue"),
+                bgcolor="rgba(255, 255, 255, 0.7)",
+                bordercolor="darkblue",
+                borderwidth=1,
+                borderpad=4,
+                xref="x",
+                yref="y"
+            )
+
+    # Display the plot directly within the function
     st.plotly_chart(fig, use_container_width=True)
+
 
 import yfinance as yf
 import pandas as pd
