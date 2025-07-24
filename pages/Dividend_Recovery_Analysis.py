@@ -115,7 +115,7 @@ def box_plot_compare(df, col1, col2, title):
     df['Difference'] = df[col2] - df[col1]
 
     df_melted = df.melt(    
-        value_vars=[col1, col2],
+        value_vars=[col1, col2, 'Difference'],
         var_name="Metric",
         value_name="Price Change ($)"
     )
