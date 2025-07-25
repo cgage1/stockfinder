@@ -1,8 +1,8 @@
 yield_max_weekly = ['CHPY','GPTY','LFGY','QDTY','RDTY','SDTY','ULTY','YMAG','YMAX']
 yield_max_groupa = ['CRSH','FEAT','FIVY','GOOY','OARK','SNOY','TSLY','TSMY','XOMO','YBIT']
 yield_max_groupb = ['BABO','DIPS','FBY','GDXY','JPMO','MARO','MRNY','NVDY','PLTY','HOOY']
-yield_max_groupc = ['ABNY','AMDY','CONY','CVNY','FIAT','MSFO','NFLY','PYPY','XYZY','YQQQ']
-yield_max_groupd = ['AIYY','AMZY','APLY','DISO','MSTY','SMCY','WNTR','XYZY','YQQQ','']
+yield_max_groupc = ['ABNY','AMDY','CONY','CVNY','DRAY','FIAT','HOOY','MSFO','NFLY','PYPY']
+yield_max_groupd = ['AIYY','AMZY','APLY','DISO','MSTY','SMCY','WNTR','XYZY','YQQQ']
 others = ['O','SCHD']
 
 # All NAV erosion stocks combined 
