@@ -3,7 +3,7 @@ import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime, timedelta
-import alerts 
+import bin.alerts as alerts 
 
 def get_stock_data_high_resolution(ticker_symbol, n_days, interval='1h'):
     """
@@ -222,7 +222,7 @@ def create_monitor_card(ticker_input):
                 # column data    
                 mc0.write(f"**{ticker_input}**<br> {dt_pst} ", unsafe_allow_html=True)
                 mc1.metric("Current Price", f"${stock_info['current_price']:.2f}", border=False)
-                if alert_data is not None: # show alerts if they exist 
+                if alert_data is not None: # show alerts if they    exist 
                     mc2.metric("Lower Alert", f"${lower_limit:.2f}", border=False, delta = lower_limit_delta, delta_color='normal')
                     mc3.metric("Upper Alert", f"${upper_limit:.2f}", border=False, delta = upper_limit_delta, delta_color='inverse')
                 plot_stock_data(historical_data, ticker_input, stock_info['company_name'], lower_limit, upper_limit)
