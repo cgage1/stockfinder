@@ -5,7 +5,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
 from plotly.subplots import make_subplots
-import stock_lists
+import db.stock_lists as stock_lists
+import io 
  # Often useful for more granular control
 
 st.set_page_config(layout="wide", page_title="Dividend Ex-Date Price Analysis")
@@ -15,7 +16,7 @@ st.title("Stock Price Behavior Around Dividend Ex-Dates")
 # Sidebar for user input
 st.sidebar.header("Stock Selection")
 ticker_symbol = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT)", "MSTY").upper()
-start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2010-01-01"))
+start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2020-01-01"))
 end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
 
 # Function to fetch data and perform analysis
@@ -111,29 +112,201 @@ def get_dividend_data(ticker, start, end):
         return None, f"Error fetching data: {e}"
 
 # BOX PLOTS FOr absolute Price Change at Open vs Close
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go # Import graph_objects for adding traces
+import streamlit as st
+import io
+from scipy.stats import t, shapiro # Import t for Student's t-distribution calculations
+
 def box_plot_compare(df, col1, col2, title):
+    """
+    Generates a box plot comparing two columns and their difference,
+    and calculates normal distribution metrics for each, displaying them
+    directly on the plot. It also adds the cumulative probability of a
+    value being greater than 0, assuming a Student's t-distribution,
+    and the results of the Shapiro-Wilk test for normality.
+    The +/- standard deviation points are now based on the Student's t-distribution's
+    properties (scaled by the sample standard deviation).
+    The plot is rendered directly using Streamlit.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        col1 (str): The name of the first column for comparison (e.g., 'At Open').
+        col2 (str): The name of the second column for comparison (e.g., 'At Close').
+        title (str): The title for the plotly chart.
+    """
+    # Calculate the 'Difference' column
+    df['Difference'] = df[col2] - df[col1]
+
+    # Melt the DataFrame for plotting
     df_melted = df.melt(
-        value_vars=[col1, col2],
+        value_vars=[col1, col2, 'Difference'],
         var_name="Metric",
         value_name="Price Change ($)"
     )
     # Rename the 'Metric' values for better readability on the plot
-    df_melted["Metric"] = df_melted["Metric"].replace({col1: "At Open", col2: "At Close"})
+    metric_labels = {
+        col1: "At Open",
+        col2: "At Close",
+        "Difference": "Close - Open Difference"
+    }
+    df_melted["Metric"] = df_melted["Metric"].replace(metric_labels)
 
+    # Create the box plot
     fig = px.box(
         df_melted,
-        x="Metric",  # This will create separate box plots for each metric
+        x="Metric",
         y="Price Change ($)",
         title=title,
-        points="all",  # Show all individual data points
-        color="Metric"  # Differentiate the box plots by color
+        points="all", # Show all individual data points
+        color="Metric" # Differentiate the box plots by color
     )
     fig.update_layout(
-        yaxis_title="Price Change ($)",  # Consistent y-axis title
-        showlegend=True  # Legend is redundant when 'x' and 'color' are the same
+        yaxis_title="Price Change ($)", # Consistent y-axis title
+        showlegend=True # Legend is redundant when 'x' and 'color' are the same
     )
     # Add a horizontal line at y=0
-    fig.add_hline(y=0, line_dash="dot", line_color="red", annotation_text="",opacity=0.25, annotation_position="bottom right")
+    fig.add_hline(y=0, line_dash="dot", line_color="red", annotation_text="", opacity=0.25, annotation_position="bottom right")
+
+    # --- Calculate and Add Normal Distribution Metrics to the Plot ---
+    metrics_to_analyze = {
+        "At Open": df[col1],
+        "At Close": df[col2],
+        "Close - Open Difference": df['Difference']
+    }
+
+    for original_col_name, data_series in metrics_to_analyze.items():
+        # Get the corresponding label used in the plot
+        metric_label = metric_labels[original_col_name] if original_col_name in metric_labels else original_col_name
+
+        mean_val = data_series.mean()
+        std_val = data_series.std() # Sample standard deviation
+
+        # Find the x-axis position for the current metric label
+        x_pos = metric_label # Use the label directly as x-coordinate for categorical axis
+
+        # Add mean marker
+        fig.add_trace(
+            go.Scatter(
+                x=[x_pos],
+                y=[mean_val],
+                mode='markers',
+                marker=dict(symbol='star', size=12, color='black'),
+                name=f'{metric_label} Mean',
+                showlegend=True
+            )
+        )
+
+        # Determine the standard deviation to use for plotting the +/- sigma points.
+        # This will be the sample standard deviation, potentially scaled if n-1 > 2
+        # to reflect the wider tails of a t-distribution.
+        std_for_sigma_points = std_val # Default to sample standard deviation
+
+        n = len(data_series)
+        if n - 1 > 2: # Degrees of freedom must be > 2 for the t-distribution variance to be finite
+            df_for_std_calc = n - 1
+            # The variance of a standard t-distribution is df / (df - 2).
+            # We scale the *sample* standard deviation by the ratio of the
+            # theoretical t-distribution's standard deviation (sqrt(df/(df-2)))
+            # to the standard deviation of a standard normal distribution (1).
+            # This makes the displayed sigma points wider for smaller sample sizes (smaller df),
+            # reflecting the heavier tails of the t-distribution.
+            t_dist_scale_factor = ((df_for_std_calc) / (df_for_std_calc - 2))**0.5
+            std_for_sigma_points = std_val * t_dist_scale_factor
+
+        # Add standard deviation markers using std_for_sigma_points
+        std_dev_points = [
+            mean_val - 3 * std_for_sigma_points, mean_val - 2 * std_for_sigma_points, mean_val - std_for_sigma_points,
+            mean_val + std_for_sigma_points, mean_val + 2 * std_for_sigma_points, mean_val + 3 * std_for_sigma_points
+        ]
+        std_dev_labels = [
+            '-3σ', '-2σ', '-1σ',
+            '+1σ', '+2σ', '+3σ'
+        ]
+
+        for i, val in enumerate(std_dev_points):
+            fig.add_trace(
+                go.Scatter(
+                    x=[x_pos],
+                    y=[val],
+                    mode='markers',
+                    marker=dict(symbol='circle', size=8, color='grey', line=dict(width=1, color='DarkSlateGrey')),
+                    name=f'{metric_label} {std_dev_labels[i]}',
+                    showlegend=True
+                )
+            )
+
+        # --- Calculate and Add Cumulative Probability (P(X > 0)) using Student's t-distribution ---
+        prob_greater_than_zero_text = ""
+        if std_val > 0 and n > 1: # Ensure std_dev is not 0 and enough data for df > 0
+            df_t = n - 1 # Degrees of freedom for t-distribution
+            std_err = std_val / (n**0.5) # Standard error of the mean
+
+            if std_err == 0: # Handle cases where std_err might be 0 (e.g., if std_val was tiny)
+                if mean_val > 0:
+                    prob_greater_than_zero = 1.0
+                else:
+                    prob_greater_than_zero = 0.0
+            else:
+                t_statistic = (0 - mean_val) / std_val # std error means that X is the mean not X bar, use std_val for predictive statistics 
+                prob_greater_than_zero = 1 - t.cdf(t_statistic, df=df_t)
+
+            prob_greater_than_zero_text = f'P(X > 0) (t-dist): {prob_greater_than_zero:.2%}'
+        else:
+            # Handle cases where std_dev is 0 or not enough data for t-dist (n <= 1)
+            if mean_val > 0:
+                prob_greater_than_zero_text = 'P(X > 0): 100.00%'
+            elif mean_val == 0:
+                prob_greater_than_zero_text = 'P(X > 0): 0.00%'
+            else:
+                prob_greater_than_zero_text = 'P(X > 0): 0.00%'
+
+        # Add P(X > 0) annotation
+        fig.add_annotation(
+            x=x_pos,
+            y=df_melted["Price Change ($)"].max() * 1.05, # Position slightly above the max y-value of the data
+            text=prob_greater_than_zero_text,
+            showarrow=False,
+            yshift=10, # Shift up slightly
+            font=dict(size=10, color="darkblue"),
+            bgcolor="rgba(255, 255, 255, 0.7)", # Semi-transparent background
+            bordercolor="darkblue",
+            borderwidth=1,
+            borderpad=4,
+            xref="x",
+            yref="y"
+        )
+
+        # --- Add Shapiro-Wilk Test for Normality ---
+        shapiro_test_text = ""
+        if n >= 3: # Shapiro-Wilk test requires at least 3 data points
+            try:
+                shapiro_stat, shapiro_p = shapiro(data_series)
+                shapiro_test_text = f'Shapiro-Wilk: p={shapiro_p:.3f}'
+            except Exception as e:
+                shapiro_test_text = f'Shapiro-Wilk: Error ({e})'
+        else:
+            shapiro_test_text = 'Shapiro-Wilk: N < 3'
+
+        # Add Shapiro-Wilk annotation
+        fig.add_annotation(
+            x=x_pos,
+            y=df_melted["Price Change ($)"].min() * 1.05, # Same y-position as P(X>0) initially
+            text=shapiro_test_text,
+            showarrow=False,
+            yshift=-5, # Shift down from the P(X>0) annotation
+            font=dict(size=10, color="darkgreen"),
+            bgcolor="rgba(255, 255, 255, 0.7)",
+            bordercolor="darkgreen",
+            borderwidth=1,
+            borderpad=4,
+            xref="x",
+            yref="y"
+        )
+
+
+    # Display the plot directly within the function
     st.plotly_chart(fig, use_container_width=True)
 
 import yfinance as yf
@@ -492,7 +665,7 @@ with tab_single:
             generate_multi_line_plot(df_high_res, yfield='Open')
         
         
-        generate_hourly_daily_distribution_plot(df_high_res, yfield='Open_Relative_to_Start', ticker_symbol=ticker_symbol)
+        # generate_hourly_daily_distribution_plot(df_high_res, yfield='Open_Relative_to_Start', ticker_symbol=ticker_symbol)
 
     else:
         st.info("Enter a stock ticker and select a date range to see the dividend analysis.")
