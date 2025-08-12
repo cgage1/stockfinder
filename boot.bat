@@ -11,7 +11,6 @@ python -m streamlit run C:\Users\colto\Documents\stockfinder\Home.py
 
 
 :: work comp 
-
 "C:\Users\ColtonGagel\OneDrive - Procon Analytics LLC\Documents\cgage1\austere_env\Scripts\activate"
 cd "C:\Users\ColtonGagel\OneDrive - Procon Analytics LLC\Documents\cgage1\stockfinder"
 python -m streamlit run "C:\Users\ColtonGagel\OneDrive - Procon Analytics LLC\Documents\cgage1\stockfinder\Home.py"
